@@ -390,6 +390,7 @@ Deno.serve(async (req: Request) => {
     let narrativeSummaries: NarrativeSummaryRow[] = [];
   let narrativeSummaryRules = "";
     let grottoRegistry = "";
+    let grottoMap = ""; 
     let hardModeActive = false;
     let plotWishlist = "";
     let activeExtras: { title: string; content: string; category: string }[] = [];
@@ -448,21 +449,22 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      // Fetch the daily save log, grotto registry, and plot wishlist notes.
+      // Fetch the daily save log, grotto registry, map, and plot wishlist notes.
       const { data: noteRows } = await supabase
         .from("playthrough_notes")
         .select("tab, content")
         .eq("playthrough_id", body.playthroughId)
-        .in("tab", ["daily-save-log", "grotto-registry", "plot-wishlist", "narrative-summaries-rules", "hard-mode-consent"]);
+        .in("tab", ["daily-save-log", "grotto-registry", "the-map", "plot-wishlist", "narrative-summaries-rules", "hard-mode-consent"]);
 
       if (noteRows) {
         for (const row of noteRows) {
           const content = (row.content as string) ?? "";
           if (row.tab === "daily-save-log") dailySaveLog = content;
           else if (row.tab === "grotto-registry") grottoRegistry = content;
+          else if (row.tab === "the-map") grottoMap = content; // Reads your existing frontend tab
           else if (row.tab === "plot-wishlist") plotWishlist = content;
-      else if (row.tab === "narrative-summaries-rules") narrativeSummaryRules = content;
-      else if (row.tab === "hard-mode-consent") hardModeActive = content === "active";
+          else if (row.tab === "narrative-summaries-rules") narrativeSummaryRules = content;
+          else if (row.tab === "hard-mode-consent") hardModeActive = content === "active";
         }
       }
 
@@ -577,6 +579,7 @@ Deno.serve(async (req: Request) => {
       summariesToInclude,
       { currentSeason, currentYear },
       grottoRegistry,
+      grottoMap,
       plotWishlistQueued,
       activeExtras,
       narrativeSummaryRules,
@@ -655,6 +658,7 @@ function buildSystemPrompt(
   summaries: NarrativeSummaryRow[],
   current: { currentSeason: string | null; currentYear: number | null },
   grottoRegistry: string,
+  grottoMap: string,
   plotWishlistQueued: string,
   extras: { title: string; content: string; category: string }[],
   summaryRules: string,
@@ -700,9 +704,10 @@ function buildSystemPrompt(
     ? `## Daily Save Log\nThe player's running log of daily saves and session checkpoints:\n${dailySaveLog}`
     : "";
 
-  const grottoRegistrySection = grottoRegistry.trim()
-    ? `## Player Grotto Registry\nThe player's tracker of locations, NPCs, items, and discoveries they have encountered:\n${grottoRegistry}`
-    : "";
+  const grottoRegistrySection = [
+    grottoRegistry.trim() ? `## Player Grotto Registry\nThe player's tracker of locations, NPCs, items, and discoveries they have encountered:\n${grottoRegistry}` : "",
+    grottoMap.trim() ? `### [GROTTO MAP & TRAVEL CHAINS]\n${grottoMap}` : ""
+  ].filter(s => s.trim().length > 0).join("\n\n");
 
   const plotWishlistSection = plotWishlistQueued.trim()
     ? `## Narrative Plot Wish List (Queued Only)\nThese are the plot threads and moments the player hopes to see unfold. Only queued items are included; completed items are intentionally omitted.\n${plotWishlistQueued}`
