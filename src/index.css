@@ -1,0 +1,83 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@300;400;500;600;700&family=Lexend:wght@300;400;500;600;700&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700&family=Comic+Neue:wght@400;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-abyss-950 text-pearl font-body antialiased;
+    background-color: #03060f;
+    overflow-x: hidden;
+  }
+  input, textarea, select {
+    font-size: 16px;
+  }
+  @media (max-width: 639px) {
+    input, textarea, select {
+      font-size: 16px !important;
+    }
+  }
+  @media (min-width: 640px) {
+    input, textarea, select {
+      font-size: inherit;
+    }
+  }
+}
+
+@layer utilities {
+  .text-glow {
+    text-shadow: 0 0 24px rgba(42, 107, 196, 0.45), 0 0 48px rgba(31, 80, 147, 0.25);
+  }
+  .text-glow-soft {
+    text-shadow: 0 0 16px rgba(74, 147, 224, 0.3);
+  }
+  .bg-radial-glow {
+    background: radial-gradient(ellipse at 50% 0%, rgba(23, 59, 107, 0.4) 0%, rgba(5, 11, 26, 0) 60%);
+  }
+  .bg-caustic {
+    background-image:
+      radial-gradient(circle at 20% 30%, rgba(74, 147, 224, 0.08) 0%, transparent 40%),
+      radial-gradient(circle at 80% 60%, rgba(31, 80, 147, 0.06) 0%, transparent 40%),
+      radial-gradient(circle at 50% 80%, rgba(42, 107, 196, 0.05) 0%, transparent 50%);
+  }
+  .glass-panel {
+    background: linear-gradient(135deg, rgba(14, 35, 68, 0.82) 0%, rgba(8, 22, 45, 0.72) 100%);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(74, 147, 224, 0.24);
+  }
+  .glass-panel-hover {
+    transition: all 0.3s ease;
+  }
+  .glass-panel-hover:hover {
+    border-color: rgba(74, 147, 224, 0.35);
+    box-shadow: 0 8px 32px rgba(23, 59, 107, 0.25);
+    transform: translateY(-2px);
+  }
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(42, 107, 196, 0.3) transparent;
+  }
+  .font-read-inter {
+    font-family: 'Inter', system-ui, sans-serif;
+    line-height: var(--reading-line-height, 1.75);
+  }
+  .font-read-lexend {
+    font-family: 'Lexend', system-ui, sans-serif;
+    line-height: var(--reading-line-height, 1.75);
+  }
+  .font-read-atkinson {
+    font-family: 'Atkinson Hyperlegible', system-ui, sans-serif;
+    line-height: var(--reading-line-height, 1.75);
+  }
+  .font-read-comic {
+    font-family: 'Comic Neue', cursive, sans-serif;
+    line-height: var(--reading-line-height, 1.75);
+  }
+}

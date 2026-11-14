@@ -1,0 +1,3 @@
+[functions.narrate]
+verify_jwt = true
+entrypoint = "./functions/narrate/index.ts"
