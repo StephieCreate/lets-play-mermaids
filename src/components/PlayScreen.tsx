@@ -84,7 +84,7 @@ function parseStatsFromSaveLog(logText: string): ParsedStats {
     parsed.level = parseInt(lvlMatch[1], 10);
   }
 
-  const xpMatch = logText.match(/\*\*Current XP:\*\*\s*(\d+)\s*\/\s*(\d+)/i);
+  const xpMatch = logText.match(/\*\*Current XP:\*\*\s*(\d+)\s*\/\s*(\d+)\s*to\s*next/i);
   if (xpMatch) {
     parsed.xp = parseInt(xpMatch[1], 10);
   }
