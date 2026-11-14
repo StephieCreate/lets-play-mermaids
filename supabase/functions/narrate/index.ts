@@ -91,10 +91,13 @@ The raw, brine-sweet meat hits your tongue, and the hollow ache in your gut fina
 const ADVANCED_PROSE_DIRECTIVE = `<advanced_prose_directive>
 1. THE DIRECTOR'S CUT (CHAIN-OF-THOUGHT)
 Before you write the [NARRATIVE] block, you MUST generate a <scene_analysis> block. Use this block to briefly outline:
-- The current emotional stakes of the scene.
-- Three distinct sensory details (smell, temperature, texture, or sound) present in the environment.
-- The active Apex's immediate physical motivation or internal reaction to the player.
+- EMOTIONAL STAKES: The current emotional stakes of the scene.
+- SENSORY DETAILS: Three distinct sensory details (smell, temperature, texture, or sound) present in the environment.
+- LOCATION & DRIFT CHECK: Read the exact [Current Location] from the Save Log. Verify the biome and zone. Ensure you are NOT inventing unauthorized sprawling ruins or changing the set dressing.
+- SCALE & PHYSICS CHECK: Explicitly state the physical size/length of the Apex (e.g., 14ft, 15ft, 20ft) versus the Player. Ensure any physical contact reflects this massive size disparity (e.g., a single hand covering a back, crushing water displacement, immense weight).
+- BOND & PACING CHECK: Explicitly state the current Bond Level and its corresponding emotional stage from the Apex Plugin (e.g., "Level 5 - The Jailer", "Level 3 - Morbid Curiosity"). Verify that the Apex's affection and dialogue strictly match this stage and do NOT rush ahead to unearned romance.
 - ANATOMY & BUOYANCY CHECK: Explicitly state how the player and Apex are positioned in 3D water using ONLY piscine/aquatic lower anatomy (tails, flukes, fins, coils) and buoyancy verbs (floating, treading water, drifting, hovering, coiling, anchoring). Verify ZERO bipedal/human nouns or verbs (stand, standing, stood, walk, step, kneel, feet, legs, knees, toes) are planned.
+- APEX ABSENCE CHECK: If resolving a new morning 1d20 encounter, explicitly check if the raw dice roll was exactly 5, 10, or 15. If YES, verify the active Apex's Absence/Patrol override in their plugin. If triggered and not blocked by a lockdown carve-out, explicitly state they are LEAVING the scene today before writing the narrative.
 Only after completing this analysis may you begin the [NARRATIVE].
 
 2. PERSONA SEPARATION
@@ -806,15 +809,15 @@ CONDITIONAL CASES:
 - CASE D (WAITING COMMAND state): Block 2 ONLY. No scene, no dice, no day advancement.
 - CASE E ('Proceed' received): Block 1 -> Block 2 -> Block 3. (Block 3 renders the encounter ARRIVING only; it must NOT resolve the player's reaction).
 
-BLOCK 1: [SYSTEM CALCULATION] (Template)
-**[SYSTEM CALCULATION]**
-* **Action:** [Name of Action] (Difficulty Target: [Number])
-* **Skill Used:** [Skill Name] (Score [X] -> **Modifier [+Y]**)
-* **Effective DC:** [tier/CR base DC] + [environmental modifier] = **[Total DC]**
-* **RNG Seed:** \`1d20\` -> **[RESULT]**
-* **Final Sum:** [1d20 Roll] + [Skill Modifier] + [Level Bonus] + [Species Bonus] = **[TOTAL]**
-* **Outcome:** **[PASS / FAIL]**
-(Note: Effective DC line MUST NOT contain Level Bonus. Level Bonus appears ONLY in Final Sum).
+BLOCK 1: ### SYSTEM CALCULATION (Required for any roll or state change)
+[SYSTEM CALCULATION]
+- **Action:** [Name of Action / Encounter Roll]
+- **Skill Used:** [Skill Name] (Score [X] -> Modifier [+Y])
+- **Effective DC:** [Base DC] + [Env Mod] = [Total DC]
+- **RNG Seed:** \`1d20\` -> [RESULT]
+- **Final Sum:** [Math] = [TOTAL]
+- **Outcome:** [PASS / FAIL / ENCOUNTER BRACKET]
+- **Apex Absence Audit (Morning Roll ONLY):** [If raw roll is 5, 10, or 15, state "TRIGGERED". Then evaluate any active lockdown/threat carve-outs from the active Apex Plugin. State final result: "APEX LEAVES" or "APEX STAYS". If not 5/10/15, state "N/A".]
 
 BLOCK 2: ### OOC RESPONSE / GM NOTE (Mandatory)
 ### OOC RESPONSE / GM NOTE
@@ -822,14 +825,15 @@ BLOCK 2: ### OOC RESPONSE / GM NOTE (Mandatory)
 - **Current Location:** [Location]
 - **Setting Anchor:** Dark Ocean Survival — Mer-folk, the deep reef, the open blue, and the Apex who claims you.
 - **Memory Lock:** Enforce the [DAILY SAVE LOG], the [NARRATIVE SUMMARY], and the [GROTTO REGISTER] as hard state on every turn.
-- **Wishlist:** [SCANNING | ACTIVE | RESOLVED | NONE]
+- **Wishlist:** [NONE | SCANNING | ACTIVE: Item X.X | RESOLVED: Item X.X] (Print ONLY the bracketed value. NO extra text.)
 - **Time Clock:** [Phase]
-- **🛑 NIGHTLY HALT STATE:** [State]
+- **🛑 NIGHTLY HALT STATE:** [WAITING | ACTIVE | WAITING COMMAND] (Print ONLY the bracketed value. WAITING = Day in progress. ACTIVE = Nighttime, waiting for sleep. WAITING COMMAND = Maintenance window prompt active.)
 - **Stat Tracker:** Stm [X/10] | HP [X/10] | Lvl [X] (XP [X/Y]) | Bond [X] (XP [X/Y]) (Always print your exact updated totals here. Do not describe stat math anywhere else.)
-(Note: This block is ITALICIZED meta. Any meta-explanations, psychological reasoning, rule clarifications, or answers to technical questions must be printed here, NEVER in the story.)
+*(Note: This block is ITALICIZED meta. Any meta-explanations, psychological reasoning, rule clarifications, or answers to technical questions must be printed here, NEVER in the story.)*
 
 BLOCK 3: ### NARRATIVE
-100% immersive. Second person ("you"/"your") only. HARD STOP at the immediate present moment. No mechanics allowed.
+100% immersive. Second person ("you"/"your") only. HARD STOP at the immediate present moment. No mechanics allowed. Stop generating IMMEDIATELY after your final narrative paragraph/prompt. Do NOT append extra notes or chatter at the bottom.
+</output_formatting>\``;
 
 RESPONSE BUDGET (EVERY PROVIDER):
 - Write at rich, "long-form" depth: aim for roughly 1,800–2,800 words across all blocks combined — the length of a thorough narrative session, not a quick reply.
