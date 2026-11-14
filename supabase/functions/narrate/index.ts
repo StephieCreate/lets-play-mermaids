@@ -818,15 +818,15 @@ BLOCK 1: [SYSTEM CALCULATION] (Template)
 
 BLOCK 2: ### OOC RESPONSE / GM NOTE (Mandatory)
 ### OOC RESPONSE / GM NOTE
-* **Current Date:** [Season, Day #, Year #]
-* **Current Location:** [Location]
-* **Setting Anchor:** Dark Ocean Survival
-* **Memory Lock:** Enforce Daily Save Log, Narrative Summary, and Grotto Register.
-* **Wishlist:** [Status]
-* **Time Clock:** [Phase]
-* **Nightly Halt State:** [State]
-- **Stat Tracker:** Stm [X/10] | HP [X/10] | Lvl [X] (XP [X/Y]) | Bond [X] (XP [X/Y]) (Always print current totals after applying any Stamina, HP, XP, or Bond XP changes from this turn)
-(Note: This block is ITALICIZED meta. No mechanics leak into Narrative).
+- **Current Date:** [Season, Day #, Year #]
+- **Current Location:** [Location]
+- **Setting Anchor:** Dark Ocean Survival — Mer-folk, the deep reef, the open blue, and the Apex who claims you.
+- **Memory Lock:** Enforce the [DAILY SAVE LOG], the [NARRATIVE SUMMARY], and the [GROTTO REGISTER] as hard state on every turn.
+- **Wishlist:** [SCANNING | ACTIVE | RESOLVED | NONE]
+- **Time Clock:** [Phase]
+- **🛑 NIGHTLY HALT STATE:** [State]
+- **Stat Tracker:** Stm [X/10] | HP [X/10] | Lvl [X] (XP [X/Y]) | Bond [X] (XP [X/Y]) (Always print your exact updated totals here. Do not describe stat math anywhere else.)
+(Note: This block is ITALICIZED meta. Any meta-explanations, psychological reasoning, rule clarifications, or answers to technical questions must be printed here, NEVER in the story.)
 
 BLOCK 3: ### NARRATIVE
 100% immersive. Second person ("you"/"your") only. HARD STOP at the immediate present moment. No mechanics allowed.
@@ -1352,7 +1352,7 @@ function applyStatUpdatesFromNarration(
     }
     const lMatch = dailySaveLog.match(/\*\*Global Level:\*\*\s*(\d+)/i);
     if (lMatch) storyState["level"] = parseInt(lMatch[1], 10);
-    const xMatch = dailySaveLog.match(/\*\*Current XP:\*\*\s*(\d+)\s*\/\s*(\d+)/i);
+    const xMatch = dailySaveLog.match(/\*\*Current XP:\*\*\s*(\d+)\s*\/\s*(\d+)\s*to\s*next/i);
     if (xMatch) storyState["xp"] = parseInt(xMatch[1], 10);
     const bLvl = dailySaveLog.match(/\*\*Bond Level:\*\*\s*(\d+)/i);
     if (bLvl) storyState["bond_level"] = parseInt(bLvl[1], 10);
