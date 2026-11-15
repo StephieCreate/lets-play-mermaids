@@ -54,11 +54,11 @@ export default function Hero() {
               
               <div>
                 <div className="flex justify-between items-center text-pearl font-medium mb-1">
-                  <span>Live Playtesting, Security & Cartridge Hub</span>
+                  <span>Live Playtesting, Status Bars & Cartridge Hub</span>
                   <span className="text-[10px] font-mono text-abyss-300">Phase 5</span>
                 </div>
                 <p className="leading-relaxed">
-                  The app is officially published and live for Discord playtesters, with full backend API key encryption locked in. Next up is an in-app Store section so playtesters can always grab the most up-to-date game cartridge file as mechanics are tuned. Down the road, the store will include an optional "Pay What You Want" (up to $15) button to support development, though checkout won't be wired up until much later—for now, it will serve purely as your hub for the latest cartridge builds.
+                  The app is officially published and live for Discord playtesters, with full backend API key encryption locked in. <strong className="text-pearl">New Feature Alert:</strong> Interactive status bars (Stm, HP, Lvl, and Bond) are now live at the top of the play screen! Since this is brand-new, please keep an eye on them to make sure they update smoothly with your turns—you can tap any pill to manually adjust your numbers or hit <em>Sync from Save &amp; Chat</em> if they ever drift, and report any hiccups. Next up is an in-app Store section so playtesters can always grab the most current game cartridge file as mechanics are tuned. Down the road, it will include an optional "Pay What You Want" (up to $15) button to support development, though checkout won't be wired up until much later.
                 </p>
               </div>
 
