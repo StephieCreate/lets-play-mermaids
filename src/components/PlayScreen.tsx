@@ -111,11 +111,11 @@ function parseStatsFromChatMessages(messages: ChatMessage[], current: ParsedStat
 
   for (const m of messages) {
     if (m.role !== 'narrator') continue;
-    const text = m.content;
+    // Strip Markdown bold/italic/code symbols (*, _, ~, `) so styling never blocks regex matching
+    const text = m.content.replace(/[*_~`]/g, '');
 
     // 1. Structured Stat Tracker line (if present)
-    const trackerLine = text.match(/\*\*Stat Tracker:\*\*([^\n]+)/i)?.[1]
-      ?? text.match(/Stat Tracker:([^\n]+)/i)?.[1];
+    const trackerLine = text.match(/Stat Tracker:\s*([^\n]+)/i)?.[1];
     if (trackerLine) {
       const stm = trackerLine.match(/Stm\s*\[?\s*(\d+)\s*\/\s*(\d+)\s*\]?/i);
       if (stm) {
@@ -139,42 +139,40 @@ function parseStatsFromChatMessages(messages: ChatMessage[], current: ParsedStat
       }
     }
 
-    // 2. Stamina (catches "Stamina: 5/10", "Stamina 7 - 2 = 5/10", "(Stamina now 5/10)", "Stamina remains 5/10")
-    const natStm = text.match(/\b(?:Stamina|Stm)\b[^.\n]{0,30}?(\d+)\s*\/\s*(\d+)/i);
-    if (natStm) {
+    // 2. Stamina (catches all matches in the message in order)
+    for (const natStm of text.matchAll(/\b(?:Stamina|Stm)\b[^.\n/]{0,40}?(\d+)\s*\/\s*(\d+)/gi)) {
       result.stamina = parseInt(natStm[1], 10);
       result.max_stamina = parseInt(natStm[2], 10);
     }
 
-    // 3. Health / HP (catches "Health: 4/10", "-2 HP (Health now 4/10)", "Health remains 6/10")
-    const natHp = text.match(/\b(?:Health|HP)\b[^.\n]{0,30}?(\d+)\s*\/\s*(\d+)/i);
-    if (natHp) {
+    // 3. Health / HP
+    for (const natHp of text.matchAll(/\b(?:Health|HP)\b[^.\n/]{0,40}?(\d+)\s*\/\s*(\d+)/gi)) {
       result.hp = parseInt(natHp[1], 10);
       result.max_hp = parseInt(natHp[2], 10);
     }
 
-    // 4. Global Level & XP (catches "Current XP: 255 / 400", "Current XP now 255 / 400", "XP now 255 / 400")
-    const natLvl = text.match(/\b(?:Global\s+Level|Character\s+Level)\b[^.\n]{0,20}?(\d+)/i);
-    if (natLvl) {
+    // 4. Global Level & XP
+    for (const natLvl of text.matchAll(/\b(?:Global\s+Level|Character\s+Level)\b[^.\n]{0,20}?(\d+)/gi)) {
       result.level = parseInt(natLvl[1], 10);
     }
-    const natXp = text.match(/\b(?:Current\s+XP|Character\s+XP|Global\s+XP)\b[^.\n]{0,25}?(\d+)\s*\/\s*(\d+)/i)
-      ?? text.match(/(?<!Bond\s)\bXP\s+(?:now|remains|is)\s*:?\s*(\d+)\s*\/\s*(\d+)/i);
-    if (natXp) {
+    for (const natXp of text.matchAll(/\b(?:Current\s+XP|Character\s+XP|Global\s+XP)\b[^.\n/]{0,30}?(\d+)\s*\/\s*(\d+)/gi)) {
       result.xp = parseInt(natXp[1], 10);
     }
 
-    // 5. Bond Level & Bond XP (catches parentheses, em-dashes "Level 5 — 59 / 60", and multi-sentence bullets)
-    const naturalBond = text.match(/(?:Current\s+Bond|Bond\s*(?:Level|Tier))\s*:?\s*(?:Level\s*|Tier\s*)?(\d+)\b[^\n\d]{1,25}?(\d+)\s*\/\s*(\d+)/i);
-    if (naturalBond) {
-      result.bond_level = parseInt(naturalBond[1], 10);
-      result.bond_xp = parseInt(naturalBond[2], 10);
+    // 5. Bond Level & Bond XP (immune to bolding and long explanations)
+    const bondMatches = Array.from(
+      text.matchAll(/(?:Current\s+Bond|Bond\s*(?:Level|Tier))\s*:?\s*(?:Level\s*|Tier\s*)?(\d+)\b[^\n\d]{1,30}?(\d+)\s*\/\s*(\d+)/gi)
+    );
+    if (bondMatches.length > 0) {
+      const last = bondMatches[bondMatches.length - 1];
+      result.bond_level = parseInt(last[1], 10);
+      result.bond_xp = parseInt(last[2], 10);
     } else {
-      const bondLvlOnly = text.match(/\b(?:Current\s+Bond|Bond\s*(?:Level|Tier))\b[^.\n]{0,20}?(?:Level\s*|Tier\s*)?(\d+)/i);
+      const bondLvlOnly = text.match(/\b(?:Current\s+Bond|Bond\s*(?:Level|Tier))\b[^.\n]{0,25}?(?:Level\s*|Tier\s*)?(\d+)/i);
       if (bondLvlOnly) {
         result.bond_level = parseInt(bondLvlOnly[1], 10);
       }
-      const bondXpOnly = text.match(/\bBond\s*XP\b[^\n]{0,150}?(\d+)\s*\/\s*(\d+)/i);
+      const bondXpOnly = text.match(/\bBond\s*XP\b[^\n]*?(\d+)\s*\/\s*(\d+)/i);
       if (bondXpOnly) {
         result.bond_xp = parseInt(bondXpOnly[1], 10);
       }
