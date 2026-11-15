@@ -164,18 +164,17 @@ function parseStatsFromChatMessages(messages: ChatMessage[], current: ParsedStat
       result.xp = parseInt(natXp[1], 10);
     }
 
-    // 5. Bond Level & Bond XP (catches "Current Bond: Level 5 (56/60)" AND standalone "Bond XP now 57 / 60")
-    const naturalBond = text.match(/Current Bond:\s*(?:Level\s*)?(\d+)\s*\(\s*(\d+)\s*\/\s*(\d+)/i)
-      ?? text.match(/Bond\s*Level\b[^.\n]{0,20}?(\d+)[^\n]*?\(\s*(\d+)\s*\/\s*(\d+)/i);
+    // 5. Bond Level & Bond XP (catches parentheses, em-dashes "Level 5 — 59 / 60", and multi-sentence bullets)
+    const naturalBond = text.match(/(?:Current\s+Bond|Bond\s*(?:Level|Tier))\s*:?\s*(?:Level\s*|Tier\s*)?(\d+)\b[^\n\d]{1,25}?(\d+)\s*\/\s*(\d+)/i);
     if (naturalBond) {
       result.bond_level = parseInt(naturalBond[1], 10);
       result.bond_xp = parseInt(naturalBond[2], 10);
     } else {
-      const bondLvlOnly = text.match(/\bBond\s*(?:Level|Tier)\b[^.\n]{0,15}?(?:Level\s*)?(\d+)/i);
+      const bondLvlOnly = text.match(/\b(?:Current\s+Bond|Bond\s*(?:Level|Tier))\b[^.\n]{0,20}?(?:Level\s*|Tier\s*)?(\d+)/i);
       if (bondLvlOnly) {
         result.bond_level = parseInt(bondLvlOnly[1], 10);
       }
-      const bondXpOnly = text.match(/\bBond\s*XP\b[^.\n]{0,30}?(\d+)\s*\/\s*(\d+)/i);
+      const bondXpOnly = text.match(/\bBond\s*XP\b[^\n]{0,150}?(\d+)\s*\/\s*(\d+)/i);
       if (bondXpOnly) {
         result.bond_xp = parseInt(bondXpOnly[1], 10);
       }
