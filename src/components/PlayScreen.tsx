@@ -104,7 +104,7 @@ function parseStatsFromSaveLog(logText: string): ParsedStats {
 
 /**
  * Scans narrator chat messages in chronological order so any Bond Update, Stat Tracker,
- * Stamina, HP, or XP changes that happened AFTER the last save log are reflected in the UI.
+ * Stamina, HP, Level, or XP changes that happened AFTER the last save log are reflected in the UI.
  */
 function parseStatsFromChatMessages(messages: ChatMessage[], current: ParsedStats): ParsedStats {
   const result: ParsedStats = { ...current };
@@ -113,7 +113,7 @@ function parseStatsFromChatMessages(messages: ChatMessage[], current: ParsedStat
     if (m.role !== 'narrator') continue;
     const text = m.content;
 
-    // 1. Structured Stat Tracker line
+    // 1. Structured Stat Tracker line (if present)
     const trackerLine = text.match(/\*\*Stat Tracker:\*\*([^\n]+)/i)?.[1]
       ?? text.match(/Stat Tracker:([^\n]+)/i)?.[1];
     if (trackerLine) {
@@ -139,28 +139,46 @@ function parseStatsFromChatMessages(messages: ChatMessage[], current: ParsedStat
       }
     }
 
-    // 2. Natural OOC Bond Update: e.g. "Current Bond: Level 5 (56 / 60 to Level 6)"
-    const naturalBond = text.match(/Current Bond:\s*(?:Level\s*)?(\d+)\s*\(\s*(\d+)\s*\/\s*(\d+)/i)
-      ?? text.match(/Bond Level:\s*(\d+)[^\n]*?\(\s*(\d+)\s*\/\s*(\d+)/i);
-    if (naturalBond) {
-      result.bond_level = parseInt(naturalBond[1], 10);
-      result.bond_xp = parseInt(naturalBond[2], 10);
-    }
-
-    // 3. Natural OOC Stamina / Health / XP totals
-    const natStm = text.match(/\bStamina:\s*(\d+)\s*\/\s*(\d+)/i);
+    // 2. Stamina (catches "Stamina: 5/10", "Stamina 7 - 2 = 5/10", "(Stamina now 5/10)", "Stamina remains 5/10")
+    const natStm = text.match(/\b(?:Stamina|Stm)\b[^.\n]{0,30}?(\d+)\s*\/\s*(\d+)/i);
     if (natStm) {
       result.stamina = parseInt(natStm[1], 10);
       result.max_stamina = parseInt(natStm[2], 10);
     }
-    const natHp = text.match(/\b(?:Health|HP):\s*(\d+)\s*\/\s*(\d+)/i);
+
+    // 3. Health / HP (catches "Health: 4/10", "-2 HP (Health now 4/10)", "Health remains 6/10")
+    const natHp = text.match(/\b(?:Health|HP)\b[^.\n]{0,30}?(\d+)\s*\/\s*(\d+)/i);
     if (natHp) {
       result.hp = parseInt(natHp[1], 10);
       result.max_hp = parseInt(natHp[2], 10);
     }
-    const natXp = text.match(/Current XP:\s*(\d+)\s*\/\s*(\d+)/i);
+
+    // 4. Global Level & XP (catches "Current XP: 255 / 400", "Current XP now 255 / 400", "XP now 255 / 400")
+    const natLvl = text.match(/\b(?:Global\s+Level|Character\s+Level)\b[^.\n]{0,20}?(\d+)/i);
+    if (natLvl) {
+      result.level = parseInt(natLvl[1], 10);
+    }
+    const natXp = text.match(/\b(?:Current\s+XP|Character\s+XP|Global\s+XP)\b[^.\n]{0,25}?(\d+)\s*\/\s*(\d+)/i)
+      ?? text.match(/(?<!Bond\s)\bXP\s+(?:now|remains|is)\s*:?\s*(\d+)\s*\/\s*(\d+)/i);
     if (natXp) {
       result.xp = parseInt(natXp[1], 10);
+    }
+
+    // 5. Bond Level & Bond XP (catches "Current Bond: Level 5 (56/60)" AND standalone "Bond XP now 57 / 60")
+    const naturalBond = text.match(/Current Bond:\s*(?:Level\s*)?(\d+)\s*\(\s*(\d+)\s*\/\s*(\d+)/i)
+      ?? text.match(/Bond\s*Level\b[^.\n]{0,20}?(\d+)[^\n]*?\(\s*(\d+)\s*\/\s*(\d+)/i);
+    if (naturalBond) {
+      result.bond_level = parseInt(naturalBond[1], 10);
+      result.bond_xp = parseInt(naturalBond[2], 10);
+    } else {
+      const bondLvlOnly = text.match(/\bBond\s*(?:Level|Tier)\b[^.\n]{0,15}?(?:Level\s*)?(\d+)/i);
+      if (bondLvlOnly) {
+        result.bond_level = parseInt(bondLvlOnly[1], 10);
+      }
+      const bondXpOnly = text.match(/\bBond\s*XP\b[^.\n]{0,30}?(\d+)\s*\/\s*(\d+)/i);
+      if (bondXpOnly) {
+        result.bond_xp = parseInt(bondXpOnly[1], 10);
+      }
     }
   }
 
