@@ -39,7 +39,7 @@ export default function Hero() {
           </div>
         </div>
 
-      {/* --- UPDATED ALPHA/BETA PHASE LOG --- */}
+        {/* --- UPDATED ALPHA/BETA PHASE LOG --- */}
         <div className="mx-auto mt-4 max-w-2xl animate-fade-in-up sm:mt-6 text-left" style={{ animationDelay: '0.6s' }}>
           <div className="glass-panel rounded-2xl p-4 border border-abyss-600/30 bg-abyss-950/40 sm:p-6">
             <div className="flex items-center gap-2 border-b border-abyss-700/30 pb-3 mb-4">
@@ -102,9 +102,6 @@ export default function Hero() {
                 </p>
               </div>
 
-            </div>
-          </div>
-        </div>            
             </div>
           </div>
         </div>
