@@ -562,6 +562,9 @@ export default function PlayScreen({ playthroughId, onBack, onSignIn, onReportBu
               }
             : prev,
         );
+
+        // Save the frontend-parsed stats directly to Supabase so they survive page refreshes
+        void persistStoryState(finalMergedState);
       }
 
       // Persist the narrator's message
