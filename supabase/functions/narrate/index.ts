@@ -96,7 +96,7 @@ Before you write the [NARRATIVE] block, you MUST generate a <scene_analysis> blo
 - LOCATION & DRIFT CHECK: Read the exact [Current Location] from the Save Log. Verify the biome and zone. Ensure you are NOT inventing unauthorized sprawling ruins or changing the set dressing.
 - SCALE & PHYSICS CHECK: Explicitly state the physical size/length of the Apex (e.g., 14ft, 15ft, 20ft) versus the Player. Ensure any physical contact reflects this massive size disparity (e.g., a single hand covering a back, crushing water displacement, immense weight).
 - BOND & PACING CHECK: Explicitly state the current Bond Level and its corresponding emotional stage from the Apex Plugin (e.g., "Level 5 - The Jailer", "Level 3 - Morbid Curiosity"). Verify that the Apex's affection and dialogue strictly match this stage and do NOT rush ahead to unearned romance.
-- ANATOMY & BUOYANCY CHECK: Explicitly state how the player and Apex are positioned in 3D water using ONLY piscine/aquatic lower anatomy (tails, flukes, fins, coils) and buoyancy verbs (floating, treading water, drifting, hovering, coiling, anchoring). Verify ZERO bipedal/human nouns or verbs (stand, standing, stood, walk, step, kneel, feet, legs, knees, toes) are planned.
+- ANATOMY & BUOYANCY CHECK: Explicitly state how the player and Apex are positioned in 3D water using ONLY piscine/aquatic lower anatomy (tails, flukes, fins, coils) and buoyancy verbs. Verify ZERO bipedal/human nouns or verbs (stand, walk, kneel, feet, legs, toes). Verify SPECIES FIN RIGIDITY: Shark and Orca dorsal fins are solid cartilage/tissue and NEVER fold, flatten, droop, or bend. However, bony fish (teleosts), rays, and flowing-finned species CAN fold, flare, flatten, or droop their fins. Apply the correct biological physics to each specific character.
 - APEX ABSENCE CHECK: If resolving a new morning 1d20 encounter, explicitly check if the raw dice roll was exactly 5, 10, or 15. If YES, verify the active Apex's Absence/Patrol override in their plugin. If triggered and not blocked by a lockdown carve-out, explicitly state they are LEAVING the scene today before writing the narrative.
 Only after completing this analysis may you begin the [NARRATIVE].
 
@@ -1335,7 +1335,7 @@ function enforceAquaticAnatomy(text: string): string {
     .replace(/\b(your|his|her|their)\s+calves\b/gi, "$1 tail muscle")
     .replace(/\b(your|his|her|their)\s+thighs\b/gi, "$1 upper tail")
     .replace(/\b(your|his|her|their)\s+legs\b/gi, "$1 tail")
-    .replace(/\b(your|his|her|their)\s+leg\b/gi, "$1 tail");
+    .replace(/\b(your|his|her|their)\s+leg\b/gi, "$1 tail"); 
 }
 
 /**
