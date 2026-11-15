@@ -39,7 +39,7 @@ export default function Hero() {
           </div>
         </div>
 
-        {/* --- UPDATED ALPHA/BETA PHASE LOG --- */}
+      {/* --- UPDATED ALPHA/BETA PHASE LOG --- */}
         <div className="mx-auto mt-4 max-w-2xl animate-fade-in-up sm:mt-6 text-left" style={{ animationDelay: '0.6s' }}>
           <div className="glass-panel rounded-2xl p-4 border border-abyss-600/30 bg-abyss-950/40 sm:p-6">
             <div className="flex items-center gap-2 border-b border-abyss-700/30 pb-3 mb-4">
@@ -53,16 +53,26 @@ export default function Hero() {
             <div className="max-h-48 overflow-y-auto pr-2 space-y-4 custom-scrollbar text-xs sm:text-sm text-muted">
               
               <div>
-                <div className="border-t border-abyss-800/40 pt-3">
                 <div className="flex justify-between items-center text-pearl font-medium mb-1">
-                  <span>Apexes Needing Testing</span>
+                  <span>Live Playtesting, Security & Cartridge Hub</span>
                   <span className="text-[10px] font-mono text-abyss-300">Phase 5</span>
                 </div>
                 <p className="leading-relaxed">
-                  Apexes are currently tested for female player characters under 9 ft: Kial, Severin, Ezra, and Mailbu. All other sizes and gender ranges have not been tested for any apexes yet. Ricsa and Idris have not been tested yet and need extensive playtesting to determine whether they are stable or need Dev adjustments. Idris features a new mechanic unique to his apex in the game master system. Ricsa pushes the waystation mechanics to their limits. Both need reporting and testing. If you are playing right now as a playtester, you may message Stephie directly through Discord or use the bug reporting feature. Akuma and Vanna are currently being brainstormed and should be up within a month or two. app will be published by the end of November, when Bolt tokens are reset to address security issues before going live for api keys. Don't worry; they are currently secure because the app isn't public. This is an extra precaution.
+                  The app is officially published and live for Discord playtesters, with full backend API key encryption locked in. Next up is an in-app Store section so playtesters can always grab the most up-to-date game cartridge file as mechanics are tuned. Down the road, the store will include an optional "Pay What You Want" (up to $15) button to support development, though checkout won't be wired up until much later—for now, it will serve purely as your hub for the latest cartridge builds.
                 </p>
               </div>
-                
+
+              <div className="border-t border-abyss-800/40 pt-3">
+                <div className="flex justify-between items-center text-pearl font-medium mb-1">
+                  <span>Apexes Needing Testing</span>
+                  <span className="text-[10px] font-mono text-abyss-300">Phase 4</span>
+                </div>
+                <p className="leading-relaxed">
+                  Apexes are currently tested for female player characters under 9 ft: Kial, Severin, Ezra, and Malibu. All other sizes and gender ranges have not been tested for any Apexes yet. Ricsa and Idris still need extensive playtesting to determine whether they are stable or need Dev adjustments—Idris features a unique new mechanic in the Game Master system, and Ricsa pushes the waystation mechanics to their limits. Akuma and Vanna are currently being brainstormed and should be up within a month or two. Playtesters can message Stephie directly on Discord or use the in-app bug reporting button!
+                </p>
+              </div>
+
+              <div className="border-t border-abyss-800/40 pt-3">
                 <div className="flex justify-between items-center text-pearl font-medium mb-1">
                   <span>Tetris Bag RNG & Markov Weather Active</span>
                   <span className="text-[10px] font-mono text-abyss-300">Phase 3</span>
@@ -91,7 +101,10 @@ export default function Hero() {
                   Core rules integration, Grotto Registry splits, and robust DeepSeek Pro baseline logic fully established. Welcome to the deep ocean!
                 </p>
               </div>
-            
+
+            </div>
+          </div>
+        </div>            
             </div>
           </div>
         </div>
