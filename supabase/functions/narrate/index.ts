@@ -1,4 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
+// Import our custom rule pruner from ruleTokenPruning.ts
+import { pruneRulesByPlayerState } from "./ruleTokenPruning.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -572,6 +574,24 @@ Deno.serve(async (req: Request) => {
     // Extract only the Queued section from the plot wishlist; ignore Completed.
     const plotWishlistQueued = extractQueuedSection(plotWishlist);
 
+   // ---- DYNAMIC RULE TOKEN PRUNING ----
+    // Loop through every loaded rule document and trim out sections that don't
+    // apply to the player's current stats, season, or recent AI narration.
+    // (To turn pruning off for testing, just comment out this for-loop!/* everything from for to the closing bracket*/)
+    for (const [slug, content] of Object.entries(ruleContents)) {
+      ruleContents[slug] = pruneRulesByPlayerState(slug, content, {
+        playerInput: body.playerInput,
+        currentScene: effectiveReq.currentScene,
+        dailySaveLog,
+        grottoRegistry,
+        grottoMap,
+        plotWishlistQueued,
+        conversationHistory: body.conversationHistory,
+        storyState: effectiveReq.storyState,
+        apexTarget: effectiveReq.apexTarget,
+      });
+    }
+    
     const systemPrompt = buildSystemPrompt(
       effectiveReq,
       ruleContents,
