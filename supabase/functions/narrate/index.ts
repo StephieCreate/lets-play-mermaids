@@ -859,7 +859,7 @@ BLOCK 2: ### OOC RESPONSE / GM NOTE (Mandatory)
 
 BLOCK 3: ### NARRATIVE
 100% immersive. Second person ("you"/"your") only. HARD STOP at the immediate present moment. No mechanics allowed. Stop generating IMMEDIATELY after your final narrative paragraph/prompt. Do NOT append extra notes or chatter at the bottom.
-</output_formatting>\``;
+</output_formatting>
 
 RESPONSE BUDGET (EVERY PROVIDER):
 - Write at rich, "long-form" depth: aim for roughly 1,800–2,800 words across all blocks combined — the length of a thorough narrative session, not a quick reply.
@@ -867,7 +867,7 @@ RESPONSE BUDGET (EVERY PROVIDER):
 - Expand by deepening the scene, not by padding: more sensory texture, emotional stakes, physical interiority, and natural dialogue. Never repeat the same idea to fill space.
 - If a scene is genuinely complete before the target length, end cleanly rather than dragging it out. But do not trim a developing scene short just to stay brief.
 - Do NOT begin a new action, question, or cliffhanger you cannot fully resolve within this same turn.
-</output_formatting>`;
+\`</output_formatting>`;
 
   return [
     identityRole,
