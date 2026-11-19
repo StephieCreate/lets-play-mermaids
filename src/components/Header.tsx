@@ -1,14 +1,15 @@
 import { useState } from 'react';
-import { Waves, User, BookOpen, Key, Type, Plus, LogIn, LogOut, Menu, X, Bug } from 'lucide-react';
+import { Waves, User, BookOpen, Key, Type, Plus, LogIn, LogOut, Menu, X, Bug, Settings } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 interface HeaderProps {
   onSignIn: () => void;
   onNavigate: (section: string) => void;
   onReportBug: () => void;
+  onOpenSettings: () => void;
 }
 
-export default function Header({ onSignIn, onNavigate, onReportBug }: HeaderProps) {
+export default function Header({ onSignIn, onNavigate, onReportBug, onOpenSettings }: HeaderProps) {
   const { user, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -90,6 +91,15 @@ export default function Header({ onSignIn, onNavigate, onReportBug }: HeaderProp
               {user.email}
             </span>
             <button
+              onClick={onOpenSettings}
+              className="flex min-h-11 items-center gap-2 rounded-lg border border-abyss-400/30 bg-abyss-600/20 px-3 py-2 text-sm font-medium text-pearl transition-all hover:border-abyss-300/50 hover:bg-abyss-500/30"
+              aria-label="Open user settings"
+              title="User Settings"
+            >
+              <Settings className="h-4 w-4" />
+              <span className="hidden sm:inline">Settings</span>
+            </button>
+            <button
               onClick={signOut}
               className="flex min-h-11 items-center gap-2 rounded-lg border border-abyss-400/30 bg-abyss-600/20 px-3 py-2 text-sm font-medium text-pearl transition-all hover:border-coral-500/40 hover:bg-coral-600/10 sm:px-4"
             >
@@ -143,6 +153,13 @@ export default function Header({ onSignIn, onNavigate, onReportBug }: HeaderProp
           >
             <Bug className="h-4 w-4" />
             Report a Bug
+          </button>
+          <button
+            onClick={() => { setMenuOpen(false); onOpenSettings(); }}
+            className="flex min-h-12 w-full items-center gap-3 rounded-xl px-4 text-left text-sm font-medium text-muted transition-colors hover:bg-abyss-800/50 hover:text-pearl"
+          >
+            <Settings className="h-4 w-4" />
+            User Settings
           </button>
           <button
             onClick={() => navigate('create')}

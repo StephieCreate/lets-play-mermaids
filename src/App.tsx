@@ -15,7 +15,10 @@ import FontSettingsPanel from '@/components/FontSettingsPanel';
 import CustomApexPanel from '@/components/CustomApexPanel';
 import AIConfiguration from '@/components/AIConfiguration';
 import BugReportModal from '@/components/BugReportModal';
+import UserSettingsModal from '@/components/UserSettingsModal';
+import PasswordUpdateModal from '@/components/PasswordUpdateModal';
 import Toast from '@/components/Toast';
+import { useAuth } from '@/context/AuthContext';
 
 type LandingTab = 'characters' | 'rules' | 'custom-apex' | 'ai-config' | 'font';
 
@@ -28,6 +31,7 @@ const TABS: { id: LandingTab; label: string; icon: typeof User }[] = [
 ];
 
 function AppContent() {
+  const { user, isPasswordRecovery, clearPasswordRecovery, isPasswordExpired } = useAuth();
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [creationModalOpen, setCreationModalOpen] = useState(false);
   const [currentView, setCurrentView] = useState<'home' | 'play'>('home');
@@ -35,7 +39,18 @@ function AppContent() {
   const [activePlaythroughId, setActivePlaythroughId] = useState<string | null>(null);
   const [rosterRefreshKey, setRosterRefreshKey] = useState(0);
   const [bugReportOpen, setBugReportOpen] = useState(false);
+  const [userSettingsOpen, setUserSettingsOpen] = useState(false);
+  const [rotationPromptOpen, setRotationPromptOpen] = useState(false);
+  const [rotationPromptSeen, setRotationPromptSeen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // 90-day rotation nudge: once per session, when the password is expired.
+  useEffect(() => {
+    if (user && isPasswordExpired && !rotationPromptSeen) {
+      setRotationPromptOpen(true);
+      setRotationPromptSeen(true);
+    }
+  }, [user, isPasswordExpired, rotationPromptSeen]);
 
   const handleCreateCharacter = useCallback(() => {
     setCreationModalOpen(true);
@@ -104,6 +119,7 @@ function AppContent() {
           onSignIn={() => setAuthModalOpen(true)}
           onNavigate={handleNavigate}
           onReportBug={() => setBugReportOpen(true)}
+          onOpenSettings={() => setUserSettingsOpen(true)}
         />
       )}
       {currentView === 'play' && activePlaythroughId ? (
@@ -187,6 +203,28 @@ function AppContent() {
         </>
       )}
       <AuthModal open={authModalOpen} onClose={() => setAuthModalOpen(false)} />
+      <UserSettingsModal
+        open={userSettingsOpen}
+        onClose={() => setUserSettingsOpen(false)}
+        onOpenAIConfig={() => {
+          setCurrentView('home');
+          setActiveTab('ai-config');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+      />
+      <PasswordUpdateModal
+        open={isPasswordRecovery}
+        mandatory
+        onClose={() => clearPasswordRecovery()}
+        title="Set a New Password"
+        description="You opened a password recovery link. Choose a new password to regain access to your account."
+      />
+      <PasswordUpdateModal
+        open={rotationPromptOpen && !isPasswordRecovery}
+        onClose={() => setRotationPromptOpen(false)}
+        title="90-Day Password Rotation"
+        description="Your password has reached the 90-day security rotation limit. Update it now to keep your account secure."
+      />
       <BugReportModal
         open={bugReportOpen}
         playthroughId={currentView === 'play' ? activePlaythroughId : null}
