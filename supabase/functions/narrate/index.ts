@@ -335,19 +335,31 @@ Deno.serve(async (req: Request) => {
     // ---- 6. DYNAMIC RULE TOKEN PRUNING ----
     // Loop through every loaded rule document and trim out sections that don't
     // apply to the player's current stats, season, or recent AI narration.
-    for (const [slug, content] of Object.entries(ruleContents)) {
-      ruleContents[slug] = pruneRulesByPlayerState(slug, content, {
-        playerInput: body.playerInput,
-        currentScene: effectiveReq.currentScene,
-        dailySaveLog,
-        grottoRegistry,
-        grottoMap,
-        plotWishlistQueued,
-        conversationHistory: body.conversationHistory,
-        storyState: effectiveReq.storyState,
-        apexTarget: effectiveReq.apexTarget,
-      });
-    }
+    // Package the shared pruning context once so both Zone 1 and Zone 2 use it
+  const pruningCtx = {
+    playerInput: body.playerInput,
+    currentScene: effectiveReq.currentScene,
+    dailySaveLog,
+    grottoRegistry,
+    grottoMap,
+    plotWishlistQueued,
+    conversationHistory: body.conversationHistory,
+    storyState: effectiveReq.storyState,
+    apexTarget: effectiveReq.apexTarget,
+    triadActive,
+  };
+
+  // Save an untouched copy of the raw rules so Zone 2 can pull on-demand templates/rivals
+  const rawRuleContents: Record<string, string> = { ...ruleContents };
+
+  // ZONE 1: Prune for the day-frozen System Prompt (100% cache-stable prefix)
+  for (const [slug, content] of Object.entries(ruleContents)) {
+    ruleContents[slug] = pruneRulesByPlayerState(slug, content, pruningCtx);
+  }
+
+  // ZONE 2: Build the Dynamic Turn Tail (empty "" on most normal turns;
+  // only populated on Save/Summary/Register, Rival arrival, or GM Q&A!)
+  const dynamicTurnTail = getDynamicTurnRules(rawRuleContents, pruningCtx);
 
     // ---- 7. Build prompts and call the AI ----
     const systemPrompt = buildSystemPrompt(
