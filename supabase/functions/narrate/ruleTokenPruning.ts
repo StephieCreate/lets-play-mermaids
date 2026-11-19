@@ -202,8 +202,29 @@ export function pruneRulesByPlayerState(
   // DOCUMENT C: "universal-core-engine"
   // --------------------------------------------------------------------------
   if (ruleSlug !== "universal-core-engine") {
-    // Any other document (like Apex Plugins) passes through untouched for now
-    return ruleText;
+    let pluginText = ruleText;
+
+    // Run the active-scene NPC pruner on any Apex Plugin ("apex-severin", "apex-kial", "apex-ezra", etc.)
+    if (ruleSlug.startsWith("apex-")) {
+      pluginText = pruneOffscreenSecondaryNpcsInApexPlugin(pluginText, {
+        apexTarget: ctx.apexTarget ?? "",
+        bondLevel,
+        rawPlayerInput,
+        twoWayRadar,
+        saveLog,
+        wishlist,
+      });
+    }
+
+    // Run the dynamic tag scanner on the plugin as well
+    return processHtmlCommentGates(pluginText, {
+      bondLevel,
+      globalLevel,
+      season,
+      hasOffspring: hasOffspringOrPregnancy,
+      twoWayRadar,
+      saveLog,
+    });
   }
 
   // Additional state flags needed for "universal-core-engine"
@@ -493,12 +514,14 @@ export function pruneRulesByPlayerState(
   // 9. Scrub non-active Apex names from examples
   pruned = scrubInactiveApexNames(pruned, ctx.apexTarget ?? "");
 
-  // 10. Process optional HTML comment gates
+  // 10. Process optional HTML comment gates & dynamic [SOMETIMES]/[GATE] tags
   pruned = processHtmlCommentGates(pruned, {
     bondLevel,
     globalLevel,
     season,
     hasOffspring: hasOffspringOrPregnancy,
+    twoWayRadar,
+    saveLog,
   });
 
   return pruned.replace(/\n{3,}/g, "\n\n").trim();
@@ -902,20 +925,353 @@ function detectIfOutsideGrotto(
 
 function processHtmlCommentGates(
   text: string,
-  state: { bondLevel: number; globalLevel: number; season: string; hasOffspring: boolean },
+  state: {
+    bondLevel: number;
+    globalLevel: number;
+    season: string;
+    hasOffspring: boolean;
+    twoWayRadar?: string;
+    saveLog?: string;
+  },
 ): string {
+  const radarAndSave = `${state.twoWayRadar ?? ""}\n${state.saveLog ?? ""}`.toLowerCase();
+
+  // Layer 1: Process <!-- [GATE: ...] --> HTML comment blocks
   const gateRegex = /<!--\s*\[GATE:\s*([^\]]+)\]\s*-->([\s\S]*?)<!--\s*\[\/GATE\]\s*-->/gi;
-  return text.replace(gateRegex, (_fullMatch, conditionRaw: string, innerContent: string) => {
-    const cond = conditionRaw.trim().toUpperCase();
+  let result = text.replace(
+    gateRegex,
+    (_fullMatch, conditionRaw: string, innerContent: string) => {
+      if (!evaluateDynamicGateCondition(conditionRaw, state, radarAndSave)) {
+        return "";
+      }
+      return innerContent;
+    },
+  );
 
-    const bondMatch = cond.match(/^BOND\s*>=\s*(\d+)$/);
-    if (bondMatch && state.bondLevel < parseInt(bondMatch[1], 10)) return "";
+  // Layer 2: Scan Markdown Headings (# to ####) for [ALWAYS], [SOMETIMES], [GATE: ...],
+  // or plain-English "- **The Trigger:** Bond Level X+" rules
+  const headingSectionRegex = /(?:^|\n)(#{1,4}\s+[^\n]+)([\s\S]*?)(?=\n#{1,4}\s+|$)/g;
 
-    const levelMatch = cond.match(/^LEVEL\s*>=\s*(\d+)$/);
-    if (levelMatch && state.globalLevel < parseInt(levelMatch[1], 10)) return "";
+  result = result.replace(
+    headingSectionRegex,
+    (fullSection, headingLine: string, bodyText: string) => {
+      if (/\[\s*ALWAYS\s*\]/i.test(headingLine)) {
+        const cleanHeading = headingLine.replace(/\s*\[\s*ALWAYS\s*\]/gi, "");
+        return `\n${cleanHeading}${bodyText}`;
+      }
 
-    if (cond === "OFFSPRING" && !state.hasOffspring) return "";
+      const headingGateMatch = headingLine.match(/\[\s*GATE:\s*([^\]]+)\]/i);
+      if (headingGateMatch) {
+        if (!evaluateDynamicGateCondition(headingGateMatch[1], state, radarAndSave)) {
+          return "\n";
+        }
+        const cleanHeading = headingLine.replace(/\s*\[\s*GATE:\s*[^\]]+\]/gi, "");
+        return `\n${cleanHeading}${bodyText}`;
+      }
 
-    return innerContent;
+      const sometimesMatch = headingLine.match(/\[\s*SOMETIMES(?::\s*([^\]]+))?\s*\]/i);
+      if (sometimesMatch) {
+        const rawKeywords = sometimesMatch[1];
+        const cleanHeading = headingLine.replace(/\s*\[\s*SOMETIMES(?::\s*[^\]]+)?\s*\]/gi, "");
+        const keywords = rawKeywords
+          ? rawKeywords.split(",").map((k) => k.trim().toLowerCase()).filter(Boolean)
+          : extractKeywordsFromHeading(cleanHeading);
+
+        if (!keywords.some((kw) => radarAndSave.includes(kw))) {
+          return "\n";
+        }
+        return `\n${cleanHeading}${bodyText}`;
+      }
+
+      const triggerLineMatch = bodyText.match(
+        /-\s*\*\*(?:The\s+)?Trigger[^*]*\*\*([^\n]+)/i,
+      );
+      if (triggerLineMatch) {
+        const triggerLine = triggerLineMatch[1];
+        const bondReqMatch = triggerLine.match(
+          /\bBond(?:\s+is|\s+reaches)?\s+Level\s+(\d+)\s*(?:\+|or\s+higher)/i,
+        );
+        if (bondReqMatch && state.bondLevel < parseInt(bondReqMatch[1], 10)) {
+          return "\n";
+        }
+        const levelReqMatch = triggerLine.match(
+          /\bGlobal\s+Level\s+(\d+)\s*(?:\+|or\s+higher)/i,
+        );
+        if (levelReqMatch && state.globalLevel < parseInt(levelReqMatch[1], 10)) {
+          return "\n";
+        }
+      }
+
+      return fullSection;
+    },
+  );
+
+  return result;
+}
+
+function evaluateDynamicGateCondition(
+  conditionRaw: string,
+  state: { bondLevel: number; globalLevel: number; season: string; hasOffspring: boolean },
+  radarAndSave: string,
+): boolean {
+  const cond = conditionRaw.trim().toUpperCase();
+  const bondMatch = cond.match(/^BOND\s*>=\s*(\d+)$/);
+  if (bondMatch) return state.bondLevel >= parseInt(bondMatch[1], 10);
+
+  const levelMatch = cond.match(/^LEVEL\s*>=\s*(\d+)$/);
+  if (levelMatch) return state.globalLevel >= parseInt(levelMatch[1], 10);
+
+  if (["SPRING", "SUMMER", "FALL", "WINTER"].includes(cond)) {
+    return state.season.toUpperCase() === cond;
+  }
+
+  if (cond === "OFFSPRING") return state.hasOffspring;
+  return radarAndSave.includes(cond.toLowerCase());
+}
+
+function extractKeywordsFromHeading(headingLine: string): string[] {
+  const stopWords = new Set([
+    "system", "mechanic", "module", "override", "rule", "lore", "directive",
+    "protocol", "table", "event", "section", "with", "from", "that", "this",
+  ]);
+  return headingLine
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((word) => word.length >= 4 && !stopWords.has(word));
+}
+
+/**
+ * ============================================================================
+ * UNIVERSAL HELPER: pruneOffscreenSecondaryNpcsInApexPlugin
+ * Works automatically on EVERY Apex Plugin (Kial, Severin, Ezra's 3 NPCs,
+ * Malibu, Ricsa, and future plugins) using a strict "Active Scene" rule:
+ *
+ *   - Primary Apex (auto-detected from "# [APEX PLUGIN: NAME]") -> ALWAYS KEPT.
+ *   - Any other [NPC PROFILE] or [SYSTEM_MODULE: X'S VOICE DIRECTIVE]:
+ *       -> KEPT 100% if they are in the active scene (Ezra's constant crew stay
+ *          loaded every single turn they are present!).
+ *       -> PRUNED TO 0 WORDS if they are NOT in the active scene (zero visual
+ *          adjectives or scars left behind to bleed onto the Primary Apex).
+ * ============================================================================
+ */
+function pruneOffscreenSecondaryNpcsInApexPlugin(
+  text: string,
+  opts: {
+    apexTarget: string;
+    bondLevel: number;
+    rawPlayerInput: string;
+    twoWayRadar: string;
+    saveLog: string;
+    wishlist: string;
+  },
+): string {
+  // 1. Auto-detect the active Primary Apex's name from "# [APEX PLUGIN: NAME (...)]"
+  //    Falls back to ctx.apexTarget if the header format ever differs.
+  const headerApexMatch = text.match(/\[APEX PLUGIN:\s*([A-Za-z]+)/i);
+  const primaryApexName = (
+    headerApexMatch?.[1] ||
+    opts.apexTarget.replace(/^apex-/i, "").split(/[\s_-]+/)[0] ||
+    ""
+  ).toLowerCase();
+
+  // 2. Build the strict "ACTIVE SCENE" text pool:
+  //    - opts.twoWayRadar = Player's current input + AI's last 2 responses + currentScene
+  //    - activeSaveLines  = ONLY the live NPC location/presence lines from the Save Log
+  //      (ignores old Interaction History so an absent rival from yesterday stays pruned!)
+  //    - opts.wishlist    = Queued Plot Wishlist items (so requested cameos can arrive)
+  const activeSaveLines = extractActiveNpcStateLines(opts.saveLog);
+  const activeScenePool =
+    `${opts.twoWayRadar}\n${activeSaveLines}\n${opts.wishlist}`.toLowerCase();
+
+  // Detect if a 20 was just rolled (lets Rivalry / Shiver arrivals load BEFORE the AI narrates them)
+  const justRolled20 =
+    /\(\(d20\s*=\s*20\)\)/i.test(opts.rawPlayerInput) ||
+    /APP_ROLL:Daily Encounter[^\n]*\b20\b/i.test(opts.rawPlayerInput) ||
+    /\brolled a (?:modified )?20\b/i.test(opts.rawPlayerInput);
+
+  // Detect if rival/intrusion triggers are firing right now
+  const isGenericRivalActive =
+    (justRolled20 && opts.bondLevel >= 10) ||
+    /\b(rival|rivalry|intruder|usurper|territory threat|sparring match|other apex|another apex|challenger|phantom's counsel)\b/i.test(
+      activeScenePool,
+    );
+
+  // 3. SAFE BLOCK SPLITTER:
+  //    Splits before any major [BRACKETED] header or "THE 20 BOND LEVELS" regardless
+  //    of how many "#" symbols it has, so sub-headings stay glued to their parent NPC
+  //    and Bond Leveling / Heart Events are NEVER accidentally cut.
+  const blockSplitRegex =
+    /(?=(?:^|\n)#{0,4}[ \t]*(?:\[(?:APEX PLUGIN|NPC PROFILE|SYSTEM_OVERRIDES?|SYSTEM_MODULE|SYSTEM_MECHANIC|SYSTEM_TABLE|SYSTEM_LORE|SYSTEM_EVENT|BEHAVIORAL_CONSTRAINT)|THE 20 BOND LEVELS))/i;
+
+  const blocks = text.split(blockSplitRegex);
+
+  // Track hidden NPC names so we can also remove their bullets from the Vocabulary Bank
+  const hiddenNpcNames = new Set<string>();
+
+  // Helper: returns TRUE only if this secondary NPC is in the active scene (or arriving now)
+  const isSecondaryNpcInActiveScene = (
+    npcName: string,
+    subtitle: string,
+    isRivalBlock: boolean,
+  ): boolean => {
+    const cleanName = npcName.trim().toLowerCase();
+
+    // Check 1: Their name appears in the active scene (Player input, AI's last 2 turns,
+    // Save Log's live NPC location lines, or queued Wishlist).
+    if (cleanName && new RegExp(`\\b${escapeRegex(cleanName)}\\b`, "i").test(activeScenePool)) {
+      return true;
+    }
+
+    // Check 2: Group & Pair Synergy (keeps Kial's Shiver pair rule intact when they visit)
+    if (["brea", "thane", "zrill"].includes(cleanName) && (/\bshiver\b/i.test(activeScenePool) || justRolled20)) {
+      return true;
+    }
+    if (cleanName === "brea" && /\bthane\b/i.test(activeScenePool)) return true;
+    if (cleanName === "thane" && /\bbrea\b/i.test(activeScenePool)) return true;
+
+    // Check 3: Their species/role subtitle appears in the active scene
+    // (e.g., "(THE REMORA)" -> "remora", "(THE BULL SHARK RIVAL)" -> "bull shark")
+    if (subtitle) {
+      const cleanedSubtitle = subtitle
+        .toLowerCase()
+        .replace(/\b(the|a|an|rival|rare|encounter|campaign|condensed|npc|pod|mate)\b/g, " ")
+        .replace(/[^a-z\s-]/g, " ")
+        .trim();
+
+      if (
+        cleanedSubtitle.length >= 4 &&
+        new RegExp(`\\b${escapeRegex(cleanedSubtitle)}\\b`, "i").test(activeScenePool)
+      ) {
+        return true;
+      }
+    }
+
+    // Check 4: Rival arrival events (20 roll at Bond 10+, rival keywords, or Level 19 Heart Event)
+    if (isRivalBlock && (isGenericRivalActive || opts.bondLevel === 19)) {
+      return true;
+    }
+
+    return false;
+  };
+
+  // 4. PASS 1: Prune any off-screen [NPC PROFILE] and [VOICE DIRECTIVE] blocks to 0 words
+  const processedBlocks = blocks.map((block) => {
+    const firstLine = block.trimStart().split("\n")[0] ?? "";
+
+    // CHECK A: Is this an "[NPC PROFILE: ...]" block?
+    // Matches "[NPC PROFILE: KIAL]", "[NPC PROFILE: BRASS (THE REMORA)]", or "[NPC PROFILE: PILAN - SCOUT]"
+    const npcProfileMatch = firstLine.match(
+      /\[NPC PROFILE:\s*([^\](:\-]+?)(?:\s*(?:\(([^)]+)\)|[-–—:]\s*([^\]]+)))?\s*\]/i,
+    );
+
+    if (npcProfileMatch) {
+      const npcName = npcProfileMatch[1].trim().toLowerCase();
+      const subtitle = (npcProfileMatch[2] ?? npcProfileMatch[3] ?? "").trim();
+
+      // SAFETY LOCK 1: Never touch the Primary Apex's own profile!
+      if (primaryApexName && npcName === primaryApexName) {
+        return block;
+      }
+
+      // SAFETY LOCK 2: Keep tiny group-trigger headers (like "[NPC PROFILE: THE SHIVER (RARE ENCOUNTER)]")
+      // that contain no physical descriptions and only explain when the group visits.
+      if (block.trim().length < 250 && !/visual|appearance|scar|hair|tail/i.test(block)) {
+        return block;
+      }
+
+      const isRivalBlock =
+        /\brival\b/i.test(subtitle) || /\bthe rival\b/i.test(block.slice(0, 300));
+
+      // Keep 100% if in the active scene; otherwise prune completely (0 words)!
+      if (isSecondaryNpcInActiveScene(npcName, subtitle, isRivalBlock)) {
+        return block;
+      }
+
+      hiddenNpcNames.add(npcName);
+      return "";
+    }
+
+    // CHECK B: Is this a "[SYSTEM_MODULE: <NAME>'S (CONDENSED) VOICE DIRECTIVE ...]" block?
+    const voiceMatch = firstLine.match(
+      /\[SYSTEM_MODULE:\s*([A-Za-z]+)(?:['’]s)?\s+(?:CONDENSED\s+)?VOICE DIRECTIVE/i,
+    );
+
+    if (voiceMatch) {
+      const npcName = voiceMatch[1].trim().toLowerCase();
+
+      // SAFETY LOCK: Never touch the Primary Apex's own Voice Directive!
+      if (primaryApexName && npcName === primaryApexName) {
+        return block;
+      }
+
+      const isRivalVoice =
+        /\bcondensed\b|\bcampaign\b|\brival\b/i.test(firstLine) ||
+        /\bthe rival\b/i.test(block.slice(0, 350));
+
+      if (isSecondaryNpcInActiveScene(npcName, "", isRivalVoice)) {
+        return block;
+      }
+
+      hiddenNpcNames.add(npcName);
+      return "";
+    }
+
+    // Everything else (Primary Apex overrides, Lore Vaults, Bond Leveling, Provisioning,
+    // 20 Heart Events, Behavioral Constraints, Silencing Kiss) stays 100% untouched!
+    return block;
   });
+
+  // 5. PASS 2: Remove off-screen NPC bullets from "NPC VOCABULARY & SENSORY BANK"
+  const finalBlocks = processedBlocks.map((block) => {
+    if (!/\[SYSTEM_MODULE:\s*NPC VOCABULARY/i.test(block) || hiddenNpcNames.size === 0) {
+      return block;
+    }
+
+    let cleanedVocab = block;
+    for (const hiddenName of hiddenNpcNames) {
+      const vocabBulletRegex = new RegExp(
+        `\\n?-[ \\t]+\\*\\*${escapeRegex(hiddenName)}\\b[^\\n]*(?:\\n[ \\t]+-[^\\n]*)*`,
+        "gi",
+      );
+      cleanedVocab = cleanedVocab.replace(vocabBulletRegex, "");
+    }
+    return cleanedVocab;
+  });
+
+  return finalBlocks.join("").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+/**
+ * HELPER: extractActiveNpcStateLines
+ * Pulls ONLY the live location/presence lines from the Daily Save Log so we know
+ * who is physically with the player on Turn 1 of a loaded save (like Ezra's crew),
+ * without accidentally unlocking absent rivals mentioned in old Interaction History.
+ */
+function extractActiveNpcStateLines(saveLog: string): string {
+  if (!saveLog) return "";
+  const lines = saveLog.split("\n");
+  const activeLines: string[] = [];
+
+  for (const line of lines) {
+    if (
+      /\*\*(?:Current Location|Current NPC Location|Secondary NPCs|Active Quests|Shiver Status|Triad Surrogate)[^*]*\*\*/i.test(
+        line,
+      )
+    ) {
+      // Skip lines that explicitly say the NPC/group is not present or none
+      if (!/:\s*(?:not present|absent|none|n\/a)\b/i.test(line)) {
+        activeLines.push(line);
+      }
+    }
+  }
+
+  return activeLines.join("\n");
+}
+
+/**
+ * Tiny helper that safely escapes punctuation before putting a string into a RegExp.
+ */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
