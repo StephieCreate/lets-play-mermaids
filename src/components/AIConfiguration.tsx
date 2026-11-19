@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Key, Sparkles, Check, Loader2, AlertTriangle, Trash2, Eye, EyeOff, Shield, Info, Plus, Star, Calculator } from 'lucide-react';
+import { Key, Sparkles, Check, Loader2, AlertTriangle, Trash2, Eye, EyeOff, Shield, Info, Plus, Star, Calculator, ShieldOff, ShieldCheck, Clock } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 
@@ -13,6 +13,7 @@ interface SafeKeyRow {
   last_four: string | null;
   base_url: string | null;
   is_active: boolean;
+  exclude_auto_delete: boolean;
   created_at: string;
 }
 
@@ -81,6 +82,9 @@ export default function AIConfiguration({ onSignIn }: AIConfigurationProps) {
   const [turnsPerDay, setTurnsPerDay] = useState(35);
   const [activeModelPricing, setActiveModelPricing] = useState<ModelOption>(DEFAULT_PRICING);
 
+  // 30-day auto-delete exclusion warning
+  const [exclusionTarget, setExclusionTarget] = useState<SafeKeyRow | null>(null);
+
   // --- Read the Active Key's chosen model from local storage ---
   const updateEstimator = useCallback(() => {
     const activeKey = keys.find(k => k.is_active);
@@ -109,9 +113,11 @@ export default function AIConfiguration({ onSignIn }: AIConfigurationProps) {
     }
     setLoading(true);
     setError(null);
+    // Purge keys older than 30 days (unless excluded) before listing.
+    await supabase.rpc('purge_expired_ai_keys');
     const { data, error: qErr } = await supabase
       .from('user_ai_keys_safe')
-      .select('id, user_id, label, provider, last_four, base_url, is_active, created_at')
+      .select('id, user_id, label, provider, last_four, base_url, is_active, exclude_auto_delete, created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: true });
 
@@ -191,6 +197,30 @@ export default function AIConfiguration({ onSignIn }: AIConfigurationProps) {
       setError(rpcErr.message);
     } else {
       flashSuccess('Active key switched.');
+      await load();
+    }
+    setBusyAction(null);
+  };
+
+  const requestExclusion = (row: SafeKeyRow) => {
+    if (!row.exclude_auto_delete) {
+      setExclusionTarget(row);
+    } else {
+      void setExclusion(row.id, false);
+    }
+  };
+
+  const setExclusion = async (keyId: string, exclude: boolean) => {
+    setBusyAction(`exclude-${keyId}`);
+    setError(null);
+    const { error: rpcErr } = await supabase.rpc('set_ai_key_auto_delete_exclusion', {
+      p_key_id: keyId,
+      p_exclude: exclude,
+    });
+    if (rpcErr) {
+      setError(rpcErr.message);
+    } else {
+      flashSuccess(exclude ? 'Key excluded from 30-day auto-delete.' : '30-day auto-delete protection restored.');
       await load();
     }
     setBusyAction(null);
@@ -340,8 +370,10 @@ export default function AIConfiguration({ onSignIn }: AIConfigurationProps) {
                 row={k}
                 busyDelete={busyAction === `delete-${k.id}`}
                 busyActivate={busyAction === `activate-${k.id}`}
+                busyExclude={busyAction === `exclude-${k.id}`}
                 onDelete={() => handleDelete(k.id)}
                 onActivate={() => handleActivate(k.id)}
+                onToggleExclusion={() => requestExclusion(k)}
               />
             ))}
 
@@ -447,7 +479,63 @@ export default function AIConfiguration({ onSignIn }: AIConfigurationProps) {
           </div>
         )}
       </div>
+
+      <AutoDeleteWarningModal
+        open={exclusionTarget !== null}
+        onCancel={() => setExclusionTarget(null)}
+        onAccept={() => {
+          if (exclusionTarget) void setExclusion(exclusionTarget.id, true);
+          setExclusionTarget(null);
+        }}
+      />
     </section>
+  );
+}
+
+function daysRemainingFor(createdAt: string): number {
+  return Math.max(0, 30 - Math.floor((Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60 * 24)));
+}
+
+function AutoDeleteWarningModal({ open, onCancel, onAccept }: { open: boolean; onCancel: () => void; onAccept: () => void }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center px-4">
+      <div className="absolute inset-0 bg-abyss-950/90 backdrop-blur-sm animate-fade-in" />
+      <div
+        className="relative z-10 w-full max-w-lg rounded-2xl border-2 border-coral-500/50 bg-abyss-900 p-8 shadow-2xl shadow-coral-950/40 animate-fade-in-up"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-coral-900/40">
+            <ShieldOff className="h-6 w-6 text-coral-300" />
+          </div>
+          <h2 className="font-display text-xl font-semibold text-coral-200">
+            Security Warning: Long-Term Key Storage
+          </h2>
+        </div>
+        <p className="text-sm leading-relaxed text-pearl/80">
+          By default, API keys are automatically deleted from our database after 30 days so you can
+          rotate or re-enter them safely. Excluding your key from auto-deletion keeps it stored
+          indefinitely, which increases your risk if your account credentials are ever compromised.
+        </p>
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+          <button
+            onClick={onCancel}
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-abyss-400/40 bg-abyss-700/30 px-5 py-3 text-sm font-semibold text-pearl transition-colors hover:bg-abyss-600/40"
+          >
+            <ShieldCheck className="h-4 w-4" />
+            Cancel (Keep 30-Day Protection)
+          </button>
+          <button
+            onClick={onAccept}
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-coral-600 to-coral-500 px-5 py-3 text-sm font-semibold text-pearl transition-all hover:from-coral-500 hover:to-coral-400"
+          >
+            <ShieldOff className="h-4 w-4" />
+            I Accept the Risk — Exclude Key
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -455,11 +543,13 @@ interface KeyCardProps {
   row: SafeKeyRow;
   busyDelete: boolean;
   busyActivate: boolean;
+  busyExclude: boolean;
   onDelete: () => void;
   onActivate: () => void;
+  onToggleExclusion: () => void;
 }
 
-function KeyCard({ row, busyDelete, busyActivate, onDelete, onActivate }: KeyCardProps) {
+function KeyCard({ row, busyDelete, busyActivate, busyExclude, onDelete, onActivate, onToggleExclusion }: KeyCardProps) {
   const info = PROVIDER_INFO[row.provider];
   const availableModels = MODELS_BY_PROVIDER[row.provider] || [];
   
@@ -498,6 +588,19 @@ function KeyCard({ row, busyDelete, busyActivate, onDelete, onActivate }: KeyCar
               {info.label}
               {row.base_url && <span className="block truncate text-muted/70">{row.base_url}</span>}
             </p>
+            <div className="mt-2">
+              {row.exclude_auto_delete ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-coral-400/40 bg-coral-900/25 px-2.5 py-0.5 text-[10px] font-semibold tracking-wide text-coral-300">
+                  <ShieldOff className="h-3 w-3" />
+                  Excluded from 30-day auto-delete
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/40 bg-amber-900/20 px-2.5 py-0.5 text-[10px] font-semibold tracking-wide text-amber-300">
+                  <Clock className="h-3 w-3" />
+                  Auto-deletes in {daysRemainingFor(row.created_at)} days
+                </span>
+              )}
+            </div>
           </div>
           
           {/* --- SMART MODEL DROPDOWN IN THE KEY CARD --- */}
@@ -531,6 +634,19 @@ function KeyCard({ row, busyDelete, busyActivate, onDelete, onActivate }: KeyCar
               Use this
             </button>
           )}
+          <button
+            onClick={onToggleExclusion}
+            disabled={busyExclude}
+            className={`inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors disabled:opacity-50 ${
+              row.exclude_auto_delete
+                ? 'border-foam-400/40 bg-foam-900/25 text-foam-200 hover:bg-foam-800/30'
+                : 'border-amber-400/40 bg-amber-900/20 text-amber-200 hover:bg-amber-800/30'
+            }`}
+            title={row.exclude_auto_delete ? 'Re-enable 30-day auto-delete' : 'Exclude this key from 30-day auto-delete'}
+          >
+            {busyExclude ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : row.exclude_auto_delete ? <ShieldCheck className="h-3.5 w-3.5" /> : <ShieldOff className="h-3.5 w-3.5" />}
+            {row.exclude_auto_delete ? 'Auto-delete On' : 'Exclude from auto-delete'}
+          </button>
           <button
             onClick={onDelete}
             disabled={busyDelete}
