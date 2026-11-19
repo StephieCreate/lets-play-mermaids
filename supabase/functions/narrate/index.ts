@@ -376,7 +376,7 @@ Deno.serve(async (req: Request) => {
       narrativeSummaryRules,
       { hardModeActive, gentleDay: Boolean(body.gentleDay) },
     );
-    const userPrompt = buildUserPrompt(effectiveReq);
+    const userPrompt = `${buildUserPrompt(effectiveReq)}${dynamicTurnTail}`;
     const conversationMessages = buildConversationMessages(
       body.conversationHistory ?? [],
       userPrompt,
