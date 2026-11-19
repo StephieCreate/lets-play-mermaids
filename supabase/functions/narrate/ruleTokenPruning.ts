@@ -125,17 +125,40 @@ export function pruneRulesByPlayerState(
   const isSleepCmd = /\b(i go to sleep|go to sleep|i am ending the day|i fall asleep|sleep for the night|retire for the night|bed down)\b/i.test(cleanPlayerInput);
 
   const gameMode = (state["game_mode"] as string) ?? "ACTIVE";
-  const isMaintenanceMode =
-    gameMode === "WAITING COMMAND" ||
-    isSaveProgressCmd ||
-    isSummaryCmd ||
-    isUpdateRegisterCmd ||
-    isSleepCmd;
+  // Group the strict bookkeeping commands together (Save, Summary, Register, Sleep)
+  const isBookkeepingCmd =
+    isSaveProgressCmd || isSummaryCmd || isUpdateRegisterCmd || isSleepCmd;
+
+  // Detect commands that start or resume active gameplay
+  const isProceedCmd = /\b(proceed|load save|load game|resume game)\b/i.test(
+    cleanPlayerInput,
+  );
+
+  // Detect if the user is running a Dev Audit test (so we NEVER bypass the pruner during testing!)
+  const isDevAuditCmd = /\b(dev audit|pruner test)\b/i.test(cleanPlayerInput);
+
+  // "Open Rulebook" check:
+  // Unlocks the full rulebook if the game is paused in WAITING COMMAND and the player
+  // is asking the GM a question (not clicking Save/Summary/Register/Sleep/Proceed),
+  // OR if they explicitly ask a rules question.
+  const isGmRulesQuestion =
+    !isDevAuditCmd &&
+    ((gameMode === "WAITING COMMAND" && !isBookkeepingCmd && !isProceedCmd) ||
+      /\b(gm question|rules? question|explain the .* (rule|mechanic))\b/i.test(
+        cleanPlayerInput,
+      ));
+
+  // Only hide the algae/flavor guide during strict bookkeeping commands
+  const isMaintenanceMode = isBookkeepingCmd;
 
   // ==========================================================================
   // STEP 2: ROUTE TO THE MATCHING DOCUMENT PRUNER
   // ==========================================================================
-
+// If the player is asking the GM a rules question during the paused Maintenance Window,
+  // return the full unpruned rule text so the GM can answer accurately!
+  if (isGmRulesQuestion) {
+    return ruleText;
+  }
   // --------------------------------------------------------------------------
   // DOCUMENT A: "universal-game-templates"
   // --------------------------------------------------------------------------
