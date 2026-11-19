@@ -117,7 +117,7 @@ export default function AIConfiguration({ onSignIn }: AIConfigurationProps) {
     await supabase.rpc('purge_expired_ai_keys');
     const { data, error: qErr } = await supabase
       .from('user_ai_keys_safe')
-      .select('id, user_id, label, provider, last_four, base_url, is_active, exclude_auto_delete, created_at')
+      .select('id, user_id, label:key_label, provider, last_four:masked_key, base_url:custom_endpoint, is_active, exclude_auto_delete, created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: true });
 

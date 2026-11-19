@@ -60,7 +60,7 @@ export default function UserSettingsModal({ open, onClose, onOpenAIConfig }: Use
     await supabase.rpc('purge_expired_ai_keys');
     const { data } = await supabase
       .from('user_ai_keys_safe')
-      .select('id, label, provider, is_active, exclude_auto_delete, created_at')
+      .select('id, label:key_label, provider, is_active, exclude_auto_delete, created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: true });
     setKeys((data as KeySummary[]) ?? []);
