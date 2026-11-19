@@ -1,5 +1,8 @@
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
-import { pruneRulesByPlayerState } from "./ruleTokenPruning.ts";
+import {
+  pruneRulesByPlayerState,
+  getDynamicTurnRules,
+} from "./ruleTokenPruning.ts";
 import {
   corsHeaders,
   CORE_RULE_SLUGS,
