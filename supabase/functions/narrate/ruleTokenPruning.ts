@@ -421,12 +421,23 @@ export function pruneRulesByPlayerState(
     );
   }
 
+  // Check if the player is getting close to starvation penalties (Stamina 4 or lower)
+  // OR if either the player or the AI's last 2 responses mention hunger/exhaustion.
+  const isNearStarvation =
+    stamina <= 4 ||
+    /\b(hungry|starving|starvation|famished|exhausted|exhaustion|collapse|stamina:\s*[0-4]\b)\b/i.test(
+      `${saveLog}\n${twoWayRadar}`,
+    );
+
+  // Unlock the Game Over / Starvation Collapse rules EARLY (at Stamina <= 4 or HP <= 4)
+  // so the AI already knows the collapse and rescue rules BEFORE you hit 0!
   const isLethalDangerInRadar =
     hp <= 4 ||
-    stamina === 0 ||
+    isNearStarvation ||
     /\b(game over|timeline rewind|abyssal miracle|near death|lethal|cannibalistic apex|rolled a 1\b|seed:\s*`?1d20`?\s*->\s*\*?\*?1\b)\b/i.test(
       `${rawPlayerInput}\n${twoWayRadar}`,
     );
+  
   if (!isLethalDangerInRadar) {
     pruned = stripMarkdownSection(
       pruned,
@@ -676,10 +687,13 @@ function pruneMedicinalAlgaeReference(
 
   // E. Advanced Apothecary Preparation Methods & Deep-Trench Poultice Recipe
   // Keep for Medic characters, active injuries/stings/infections, or medicine crafting.
+  // Keep Apothecary Prep Methods when injured, approaching starvation fatigue (Stamina <= 4),
+  // or actively treating wounds/stings.
   const isApothecaryPrepNeeded =
     isMedicCharacter ||
     opts.hp < opts.maxHp ||
-    /\b(injury|injured|wound|wounded|bleed|bleeding|laceration|sting|stung|venom|infection|infected|burn|gill|heal|healing|medicinal|medicine|poultice|salve|bandage|cast|apothecary|remedy|cure|treat|steep|macerat)\b/i.test(
+    opts.stamina <= 4 ||
+    /\b(injury|injured|wound|wounded|bleed|bleeding|laceration|sting|stung|venom|infection|infected|burn|gill|heal|healing|medicinal|medicine|poultice|salve|bandage|cast|apothecary|remedy|cure|treat|steep|macerat|starving|exhausted|fatigue)\b/i.test(
       combinedContext,
     );
 
