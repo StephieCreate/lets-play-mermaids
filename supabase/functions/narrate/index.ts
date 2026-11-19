@@ -98,6 +98,7 @@ Before you write the [NARRATIVE] block, you MUST generate a <scene_analysis> blo
 - LOCATION & DRIFT CHECK: Read the exact [Current Location] from the Save Log. Verify the biome and zone. Ensure you are NOT inventing unauthorized sprawling ruins or changing the set dressing.
 - SCALE & PHYSICS CHECK: Explicitly state the physical size/length of the Apex (e.g., 14ft, 15ft, 20ft) versus the Player. Ensure any physical contact reflects this massive size disparity (e.g., a single hand covering a back, crushing water displacement, immense weight).
 - BOND & PACING CHECK: Explicitly state the current Bond Level and its corresponding emotional stage from the Apex Plugin (e.g., "Level 5 - The Jailer", "Level 3 - Morbid Curiosity"). Verify that the Apex's affection and dialogue strictly match this stage and do NOT rush ahead to unearned romance.
+- ENTITY & APPEARANCE LOCK (ANTI-BLEED): Explicitly list the Primary Apex and any rival or secondary NPCs separately, writing down each character's exact species, coloration, and markings from their own dedicated block. NEVER merge, swap, or bleed a rival's physical traits onto the Primary Apex, or vice versa.
 - ANATOMY & BUOYANCY CHECK: Explicitly state how the player and Apex are positioned in 3D water using ONLY piscine/aquatic lower anatomy (tails, flukes, fins, coils) and buoyancy verbs. Verify ZERO bipedal/human nouns or verbs (stand, walk, kneel, feet, legs, toes). Verify SPECIES FIN RIGIDITY: Shark and Orca dorsal fins are solid cartilage/tissue and NEVER fold, flatten, droop, or bend. However, bony fish (teleosts), rays, and flowing-finned species CAN fold, flare, flatten, or droop their fins. Apply the correct biological physics to each specific character.
 - APEX ABSENCE CHECK: If resolving a new morning 1d20 encounter, explicitly check if the raw dice roll was exactly 5, 10, or 15. If YES, verify the active Apex's Absence/Patrol override in their plugin. If triggered and not blocked by a lockdown carve-out, explicitly state they are LEAVING the scene today before writing the narrative.
 Only after completing this analysis may you begin the [NARRATIVE].
@@ -1236,7 +1237,8 @@ async function callAI(
 3. NO SOFT LANDINGS: Maintain lethal survival difficulty. Do not apologize for or soften toxic Apex behavior.
 4. FORMATTING: You MUST follow the Block 1 (Calc) -> Block 2 (OOC) -> Block 3 (Narrative) sequence.
 5. STRICT AQUATIC ANATOMY & BUOYANCY GATE: Merfolk and Apexes DO NOT HAVE LEGS, FEET, KNEES, ANKLES, OR TOES, and they NEVER "stand", "walk", "step", or "kneel". Replace all standing/walking concepts with floating, treading water, drifting, hovering, or coiling their tails.`;
-
+6. ENTITY SEPARATION LOCK: Never blend physical descriptions between the Primary Apex and any rival or side NPC. Verify the Primary Apex matches ONLY their own appearance block before describing them.
+  
   // 3. Constructing the Envelope Sandwich
   // Temporarily pop the newest player input off the end of the array
   const latestPlayerMessage = conversationMessages.pop();
