@@ -178,6 +178,147 @@ const isNightlyHalt = (text: string) => {
     lower.includes('set up camp and sleep');
 };
 
+interface TimePacingState {
+  currentPhase: string;
+  turnsInPhase: number;
+  totalDayTurns: number;
+  directive: string;
+}
+
+/**
+ * Backend Time Clock Telemetry for the 6-phase ladder:
+ * Morning -> Late Morning -> Noon -> Afternoon -> Evening -> Night (~35 turns/day)
+ * Works WITH the Markdown Living Clock, Slow Clock, and Travel Route rules.
+ */
+function buildTimePassageDirective(
+  conversationHistory: Array<{ role: string; content: string }>,
+  dailySaveLog: string,
+  playerInput: string,
+): TimePacingState {
+  const PHASES = ["Morning", "Late Morning", "Noon", "Afternoon", "Evening", "Night"];
+
+  const normalizePhase = (raw: string): string | null => {
+    const val = raw.trim().toLowerCase();
+    if (val === "late morning") return "Late Morning";
+    if (val === "morning") return "Morning";
+    if (val === "noon" || val === "midday") return "Noon";
+    if (val === "afternoon") return "Afternoon";
+    if (val === "evening" || val === "dusk") return "Evening";
+    if (val === "night") return "Night";
+    return null;
+  };
+
+  const extractPhase = (text: string): string | null => {
+    const clean = text.replace(/[*_~`]/g, "");
+    const m = clean.match(/Time Clock:\s*(Late\s+Morning|Morning|Noon|Midday|Afternoon|Evening|Dusk|Night)/i);
+    return m ? normalizePhase(m[1]) : null;
+  };
+
+  const narratorMsgs = (conversationHistory || []).filter(
+    (m) => m.role === "assistant" || m.role === "narrator"
+  );
+  const totalDayTurns = narratorMsgs.length + 1;
+
+  // 1. Get current phase from latest narrator turn (or Save Log at day start)
+  let currentPhase = "Morning";
+  if (narratorMsgs.length > 0) {
+    for (let i = narratorMsgs.length - 1; i >= 0; i--) {
+      const found = extractPhase(narratorMsgs[i].content);
+      if (found) {
+        currentPhase = found;
+        break;
+      }
+    }
+  } else {
+    const savePhase = dailySaveLog.match(
+      /Year\s+\d+\s*[-—]\s*(Late\s+Morning|Morning|Noon|Midday|Afternoon|Evening|Dusk|Night)/i
+    );
+    if (savePhase) {
+      currentPhase = normalizePhase(savePhase[1]) ?? "Morning";
+    }
+  }
+
+  // 2. Count consecutive turns spent in this exact phase
+  let turnsInPhase = 0;
+  for (let i = narratorMsgs.length - 1; i >= 0; i--) {
+    const p = extractPhase(narratorMsgs[i].content);
+    if (p === currentPhase) {
+      turnsInPhase++;
+    } else if (p !== null) {
+      break;
+    }
+  }
+
+  const currentTurnInPhase = turnsInPhase + 1;
+  const phaseIdx = PHASES.indexOf(currentPhase);
+  const nextPhase = phaseIdx >= 0 && phaseIdx < PHASES.length - 1 ? PHASES[phaseIdx + 1] : "Night";
+
+  // 3. Detect which of your Markdown Time Rails applies to this turn
+  const isTravelIntent = /\b(swim\s+(?:back|home|to|toward|east|west|north|south)|head\s+(?:back|home|to|toward)|travel\s+to|return\s+to\s+the\s+grotto|leave\s+for|journey\s+to|skip\s+to\s+arrival)\b/i.test(
+    playerInput
+  );
+
+  const isQuietMoment = /\b(cuddle|curl\s+up|groom|grooming|nestle|whisper|rest\s+against|lean\s+against|hold\s+(?:him|her|them)|quietly|stillness|nuzzle|stroke|pet|stay\s+close)\b/i.test(
+    playerInput
+  );
+
+  // 4. Night Phase Lock + Nightfall Threat Reminder
+  if (currentPhase === "Night") {
+    return {
+      currentPhase,
+      turnsInPhase,
+      totalDayTurns,
+      directive: `[TIME CLOCK TELEMETRY — NIGHT (Turn ${currentTurnInPhase} in Night | Day Turn #${totalDayTurns})]: Time Clock is at **Night**. Keep Time Clock at **Night** until the player sleeps/saves. If the player is in open water or an unsecured location, enforce [CAUGHT IN THE DARK (NIGHTFALL)] (-5 encounter roll, +5 DC penalty; Encounter Overlap Limit applies).`,
+    };
+  }
+
+  // 5. Travel Route Rail
+  if (isTravelIntent) {
+    return {
+      currentPhase,
+      turnsInPhase,
+      totalDayTurns,
+      directive: `[TIME CLOCK TELEMETRY — TRAVEL CHECK (${currentPhase} -> ${nextPhase} | Day Turn #${totalDayTurns})]: The player may be initiating travel. Enforce [THE TRAVEL ROUTE]: state the exact chain of nodes, NO fast-travel/teleportation, and advance +1 phase per completed travel hop (${currentPhase} → ${nextPhase}).`,
+    };
+  }
+
+  // 6. Slow Clock Rail (Quiet Moments)
+  if (isQuietMoment) {
+    return {
+      currentPhase,
+      turnsInPhase,
+      totalDayTurns,
+      directive: `[TIME CLOCK TELEMETRY — SLOW CLOCK ACTIVE (Turn ${currentTurnInPhase} in ${currentPhase} | Day Turn #${totalDayTurns})]: This turn reads as a Quiet Moment. [THE SLOW CLOCK] overrides the Living Clock: HOLD Time Clock at **${currentPhase}** while the player is still present in the moment. Advance to **${nextPhase}** ONLY after the moment naturally exhales/closes.`,
+    };
+  }
+
+  // 7. Living Clock Pacing Telemetry (~5-7 turns per phase, ~35 turns/day)
+  if (currentTurnInPhase <= 4) {
+    return {
+      currentPhase,
+      turnsInPhase,
+      totalDayTurns,
+      directive: `[TIME CLOCK TELEMETRY — ${currentPhase} (Turn ${currentTurnInPhase} of ~6 | Day Turn #${totalDayTurns} of ~35)]: Current phase is **${currentPhase}** (next in ladder: **${nextPhase}**). Unless a major [LIVING CLOCK] beat or travel hop fully closes on this turn, hold Time Clock at **${currentPhase}** so the scene has room to breathe.`,
+    };
+  }
+
+  if (currentTurnInPhase <= 7) {
+    return {
+      currentPhase,
+      turnsInPhase,
+      totalDayTurns,
+      directive: `[TIME CLOCK TELEMETRY — LIVING CLOCK WINDOW (Turn ${currentTurnInPhase} of ~6 in ${currentPhase} | Day Turn #${totalDayTurns} of ~35)]: You are in the ideal 5–7 turn window for **${currentPhase}**. Run the End-of-Response Audit: if a meaningful beat (encounter, survival check, foraging, repair, or extended exchange) closes on this turn, ADVANCE Time Clock to **${nextPhase}** with subtle water/light cues. If mid-beat or in a Quiet Moment, hold at **${currentPhase}**.`,
+    };
+  }
+
+  return {
+    currentPhase,
+    turnsInPhase,
+    totalDayTurns,
+    directive: `[TIME CLOCK TELEMETRY — LIVING CLOCK ALERT (Turn ${currentTurnInPhase} in ${currentPhase} | Day Turn #${totalDayTurns} of ~35)]: **${currentPhase}** has lasted ${currentTurnInPhase} turns. Run the End-of-Response Audit: unless the player is actively inside a [SLOW CLOCK] Quiet Moment or split-second combat, transition the ambient light/current and ADVANCE Time Clock to **${nextPhase}** on this turn.`,
+  };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -306,7 +447,8 @@ Deno.serve(async (req: Request) => {
       
       Resume Mode B Narrative Gameplay by generating the morning scene using these exact server-provided facts. ${dcRecalc} 
       [SEQUENCING GATE]: You must present the encounter and then IMMEDIATELY STOP. Do NOT narrate the player's reaction, do NOT resolve the survival check, and do NOT move the player. End your response by asking the player what they do.
-      [FORMATTING LOCK]: You MUST include the exact "Stat Tracker: Stm [X/10]..." line inside your OOC block, updating it with the -2 Morning Wake-Up stamina cost.]`;
+      [STAMINA GUARD]: Inspect the [DAILY SAVE LOG]. Deduct the -2 Morning Wake-Up stamina cost ONLY ONCE. If the Save Log says "(-2 pending at Proceed)", deduct -2 now. If the Save Log ALREADY deducted the -2 morning cost when saving, DO NOT deduct it a second time!
+      [FORMATTING LOCK]: You MUST include the exact "Stat Tracker: Stm [X/10]..." line inside your OOC block, reflecting the accurate morning stamina.;
     } 
     else if (isSummaryRequest(body.playerInput)) {
       body.playerInput += `\n\n[MANDATORY SYSTEM DIRECTIVE FOR NARRATIVE SUMMARY]:\nThe player has commanded a summary. You MUST summarize the specific events, encounters, and dialogue of the CURRENT IN-GAME DAY ONLY. Base your summary 100% on the active chat history. Output in a clean Markdown code block formatted strictly according to the Tab 3 specifications with zero conversational filler.`;
@@ -316,7 +458,7 @@ Deno.serve(async (req: Request) => {
       // Flip the initialization flag so the Hard-State armor engages for the rest of the game
       body.storyState["files_initialized"] = true;
       
-      body.playerInput += `\n\n[MANDATORY SYSTEM DIRECTIVE FOR DAILY SAVE LOG]:\nThe player has commanded a save. You MUST output an updated Daily Save Log capturing all events, wound penalties, supplies consumed, and time progression. Format strictly according to Tab 2 specifications in a clean Markdown code block with zero conversational filler.`;
+      body.playerInput += `\n\n[MANDATORY SYSTEM DIRECTIVE FOR DAILY SAVE LOG]:\nThe player has commanded a save. You MUST output an updated Daily Save Log capturing all events, wound penalties, supplies consumed, and time progression. Format strictly according to Tab 2 specifications in a clean Markdown code block with zero conversational filler.\n[STAMINA TIMING LOCK]: Apply ONLY overnight rest/healing/thermal quartz bonuses. You are STRICTLY FORBIDDEN from deducting the -2 Morning Wake-Up Stamina cost during Save Log generation. Record the player's rested Stamina and write "(-2 pending at Proceed)" next to it.`;
     }
 
     // --- THE APP-INJECTED STANDBY ROLL (Universal Backend Protocol) ---
@@ -391,13 +533,15 @@ Deno.serve(async (req: Request) => {
     let triadActive = false;
     let triadTarget = "";
     let narrativeSummaries: NarrativeSummaryRow[] = [];
-  let narrativeSummaryRules = "";
+    let narrativeSummaryRules = "";
     let grottoRegistry = "";
     let grottoMap = ""; 
     let hardModeActive = false;
     let plotWishlist = "";
     let activeExtras: { title: string; content: string; category: string }[] = [];
-
+    let lockedSaveLogWeather: string | null = null;
+    let staminaPendingInSaveLog = false;
+    
     if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
       const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -471,6 +615,20 @@ Deno.serve(async (req: Request) => {
         }
       }
 
+      // 1. Check if the Save Log already locked in today's Ocean Condition
+      const saveLogWeatherMatch = dailySaveLog.match(/Ocean Condition:\s*([^\n|*]+)/i);
+      lockedSaveLogWeather =
+        saveLogWeatherMatch && !/pending|none|tbd/i.test(saveLogWeatherMatch[1])
+          ? saveLogWeatherMatch[1].trim()
+          : null;
+
+      // 2. Check if the Save Log explicitly noted that the -2 morning stamina cost is still pending
+      staminaPendingInSaveLog = /pending at Proceed/i.test(dailySaveLog);
+
+      if (lockedSaveLogWeather && body.playerInput.includes("The player has typed Proceed")) {
+        body.playerInput += `\n\n[WEATHER LOCK — ENFORCE SAVE LOG]: Today's Ocean Condition is already locked in the [DAILY SAVE LOG] as:   "${lockedSaveLogWeather}". You are STRICTLY FORBIDDEN from rolling or substituting a different weather condition (such as Plankton Bloom). Use "${lockedSaveLogWeather}" and its exact modifiers in your OOC block and narrative.`;
+      }
+      
       // Fetch all narrative summaries for this playthrough.
       const { data: summaryRows } = await supabase
         .from("narrative_summaries")
