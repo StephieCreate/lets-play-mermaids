@@ -448,7 +448,7 @@ Deno.serve(async (req: Request) => {
       Resume Mode B Narrative Gameplay by generating the morning scene using these exact server-provided facts. ${dcRecalc} 
       [SEQUENCING GATE]: You must present the encounter and then IMMEDIATELY STOP. Do NOT narrate the player's reaction, do NOT resolve the survival check, and do NOT move the player. End your response by asking the player what they do.
       [STAMINA GUARD]: Inspect the [DAILY SAVE LOG]. Deduct the -2 Morning Wake-Up stamina cost ONLY ONCE. If the Save Log says "(-2 pending at Proceed)", deduct -2 now. If the Save Log ALREADY deducted the -2 morning cost when saving, DO NOT deduct it a second time!
-      [FORMATTING LOCK]: You MUST include the exact "Stat Tracker: Stm [X/10]..." line inside your OOC block, reflecting the accurate morning stamina.;
+      [FORMATTING LOCK]: You MUST include the exact "Stat Tracker: Stm [X/10]..." line inside your OOC block, reflecting the accurate morning stamina.`;
     } 
     else if (isSummaryRequest(body.playerInput)) {
       body.playerInput += `\n\n[MANDATORY SYSTEM DIRECTIVE FOR NARRATIVE SUMMARY]:\nThe player has commanded a summary. You MUST summarize the specific events, encounters, and dialogue of the CURRENT IN-GAME DAY ONLY. Base your summary 100% on the active chat history. Output in a clean Markdown code block formatted strictly according to the Tab 3 specifications with zero conversational filler.`;
@@ -627,6 +627,20 @@ Deno.serve(async (req: Request) => {
 
       if (lockedSaveLogWeather && body.playerInput.includes("The player has typed Proceed")) {
         body.playerInput += `\n\n[WEATHER LOCK — ENFORCE SAVE LOG]: Today's Ocean Condition is already locked in the [DAILY SAVE LOG] as:   "${lockedSaveLogWeather}". You are STRICTLY FORBIDDEN from rolling or substituting a different weather condition (such as Plankton Bloom). Use "${lockedSaveLogWeather}" and its exact modifiers in your OOC block and narrative.`;
+      }
+      
+// 3. Inject Time Clock Telemetry ONLY during active gameplay turns
+      // (Completely skips Maintenance Window / WAITING COMMAND, Sleep, Save, Summary, and Proceed)
+      if (
+        currentGameState === "ACTIVE" &&
+        !body.playerInput.includes("[MANDATORY SYSTEM DIRECTIVE")
+      ) {
+        const timePacing = buildTimePassageDirective(
+          body.conversationHistory ?? [],
+          dailySaveLog,
+          body.playerInput,
+        );
+        body.playerInput += `\n\n${timePacing.directive}`;
       }
       
       // Fetch all narrative summaries for this playthrough.
