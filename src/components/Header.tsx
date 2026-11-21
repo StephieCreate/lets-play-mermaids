@@ -7,6 +7,7 @@ import {
   Check,
   Settings,
   Bug,
+  MessageCircle,
   LogIn,
   LogOut,
 } from 'lucide-react';
@@ -114,6 +115,16 @@ export default function Header({
             <span>Report a Bug</span>
           </button>
 
+          <a
+  href="https://discord.gg/G5DbenAjJ"
+  target="_blank"
+  rel="noopener noreferrer"
+  className="flex min-h-11 w-full items-center gap-3 rounded-xl border border-transparent px-3.5 py-2.5 text-sm font-medium text-muted transition-all hover:bg-abyss-800/40 hover:text-pearl"
+>
+  <MessageCircle className="h-4 w-4 shrink-0 text-indigo-300" />
+  <span>Join us on Discord</span>
+</a>
+          
           <div className="pt-2">
             {user ? (
               <div className="space-y-2 rounded-xl border border-abyss-700/30 bg-abyss-900/40 p-2.5">
