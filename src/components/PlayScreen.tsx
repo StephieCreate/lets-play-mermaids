@@ -427,7 +427,7 @@ export default function PlayScreen({ playthroughId, onBack, onSignIn, onReportBu
   };
 
   const adjustBondLevel = (delta: number) => {
-    const nextBond = Math.max(0, Math.min(20, bondLevel + delta));
+    const nextBond = Math.max(1, Math.min(20, bondLevel + delta));
     persistStoryState({ ...rawState, bond_level: nextBond });
   };
 
