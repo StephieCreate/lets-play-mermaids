@@ -130,6 +130,60 @@ export default function GrottoRegistry({ playthroughId, onSignIn }: GrottoRegist
   };
 
   return (
+    return (
+    <div className="space-y-4">
+      {/* Hard Mode Consent — standalone card above Grotto Registry */}
+      <div className="glass-panel min-w-0 rounded-2xl">
+        <button
+          type="button"
+          onClick={() => setConsentCollapsed((prev) => !prev)}
+          aria-expanded={!consentCollapsed}
+          className="flex w-full items-center gap-2 rounded-2xl p-3.5 text-left transition-colors hover:bg-abyss-900/35"
+        >
+          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted">
+            {consentCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-sm font-medium text-pearl">
+            AI Hard Mode Consent
+          </span>
+          <span
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] transition-colors ${
+              hardModeActive
+                ? 'border-coral-400/40 bg-coral-900/30 text-coral-300'
+                : 'border-abyss-600/40 bg-abyss-900/40 text-muted'
+            }`}
+          >
+            {hardModeActive ? <ShieldAlert className="h-3 w-3" /> : <ShieldCheck className="h-3 w-3" />}
+            {hardModeActive ? 'Active' : 'Off'}
+          </span>
+        </button>
+
+        {!consentCollapsed && (
+          <div className="space-y-4 border-t border-abyss-700/30 p-4">
+            <pre className="whitespace-pre-wrap font-mono text-xs leading-6 text-muted">
+              {HARD_MODE_CONSENT_TEXT}
+            </pre>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={toggleHardMode}
+                disabled={!user || hardModeSaving}
+                className={`inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border px-4 text-xs font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
+                  hardModeActive
+                    ? 'border-coral-400/40 bg-coral-900/20 text-coral-300 hover:border-coral-300/60 hover:bg-coral-800/40'
+                    : 'border-abyss-400/40 bg-abyss-700/30 text-pearl hover:border-abyss-300/60 hover:bg-abyss-600/40'
+                }`}
+                title={user ? (hardModeActive ? 'Turn off hard mode' : 'Activate hard mode') : 'Sign in to toggle'}
+              >
+                {hardModeSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                {hardModeActive ? 'Deactivate Hard Mode' : 'Activate Hard Mode'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <section className="glass-panel min-w-0 rounded-2xl p-4 sm:p-8">
     <section className="glass-panel min-w-0 rounded-2xl p-4 sm:p-8">
       <div className="flex flex-col gap-4 border-b border-abyss-700/30 pb-5 sm:gap-5 sm:pb-6">
         <div>
@@ -197,54 +251,6 @@ export default function GrottoRegistry({ playthroughId, onSignIn }: GrottoRegist
         </button>
       </div>
 
-      {/* Hard Mode Consent — collapsed tab */}
-      <div className="mt-5 rounded-xl border border-abyss-600/30 bg-abyss-950/35">
-        <div className="flex items-center gap-2 p-3">
-          <button
-            onClick={() => setConsentCollapsed((prev) => !prev)}
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:text-pearl"
-            aria-label={consentCollapsed ? 'Expand' : 'Collapse'}
-          >
-            {consentCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </button>
-          <button
-            onClick={() => setConsentCollapsed((prev) => !prev)}
-            className="min-w-0 flex-1 truncate text-left text-sm font-medium text-pearl"
-          >
-            AI Hard Mode Consent
-          </button>
-          <span
-            className={`shrink-0 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] transition-colors ${
-              hardModeActive
-                ? 'border-coral-400/40 bg-coral-900/30 text-coral-300'
-                : 'border-abyss-600/40 bg-abyss-900/40 text-muted'
-            }`}
-          >
-            {hardModeActive ? <ShieldAlert className="h-3 w-3" /> : <ShieldCheck className="h-3 w-3" />}
-            {hardModeActive ? 'Active' : 'Off'}
-          </span>
-          <button
-            onClick={toggleHardMode}
-            disabled={!user || hardModeSaving}
-            className={`inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
-              hardModeActive
-                ? 'border-coral-400/40 bg-coral-900/20 text-coral-300 hover:border-coral-300/60 hover:bg-coral-800/40'
-                : 'border-abyss-400/40 bg-abyss-700/30 text-pearl hover:border-abyss-300/60 hover:bg-abyss-600/40'
-            }`}
-            title={user ? (hardModeActive ? 'Turn off hard mode' : 'Activate hard mode') : 'Sign in to toggle'}
-          >
-            {hardModeSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-            {hardModeActive ? 'Deactivate' : 'Activate'}
-          </button>
-        </div>
-        {!consentCollapsed && (
-          <div className="border-t border-abyss-700/30 p-4">
-            <pre className="whitespace-pre-wrap font-mono text-xs leading-6 text-muted">
-              {HARD_MODE_CONSENT_TEXT}
-            </pre>
-          </div>
-        )}
-      </div>
 
       {error && <p className="mt-5 rounded-lg border border-coral-600/30 bg-coral-600/10 px-4 py-3 text-sm text-coral-300">{error}</p>}
 
@@ -277,5 +283,6 @@ export default function GrottoRegistry({ playthroughId, onSignIn }: GrottoRegist
         </pre>
       )}
     </section>
+    </div>
   );
 }
