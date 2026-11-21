@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { apexes } from '@/data/apexes';
 import type { CharacterWithPlaythroughs, Playthrough } from '@/types/database';
 
 interface CharacterRosterProps {
@@ -25,6 +26,17 @@ interface CharacterRosterProps {
 function getActiveApexLabel(pt?: Playthrough): string | null {
   if (!pt) return null;
 
+  const rawTarget = typeof pt.apex_target === 'string' ? pt.apex_target.trim() : '';
+
+  // Match official Apexes directly against @/data/apexes
+  if (rawTarget) {
+    const matched = apexes.find(
+      (a) => a.slug === rawTarget || a.name.toLowerCase() === rawTarget.toLowerCase(),
+    );
+    if (matched) return matched.name;
+  }
+
+  // Fallback for custom apexes stored in story_state or slug format
   const state = pt.story_state as Record<string, unknown> | null | undefined;
   const fromState =
     (typeof state?.apex_name === 'string' && state.apex_name.trim()) ||
@@ -32,26 +44,23 @@ function getActiveApexLabel(pt?: Playthrough): string | null {
     (typeof state?.custom_apex_name === 'string' && state.custom_apex_name.trim()) ||
     '';
 
-  const raw = fromState || (typeof pt.apex_target === 'string' ? pt.apex_target.trim() : '');
-  if (!raw) return null;
+  const fallback = fromState || rawTarget;
+  if (!fallback) return null;
 
-  // Avoid displaying raw custom UUIDs if custom apexes use a prefix
-  if (raw.startsWith('custom:') || /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(raw)) {
+  if (fallback.startsWith('custom:') || /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(fallback)) {
     return 'Custom Apex';
   }
 
-  // Format lowercase slugs like "severin" or "bull-shark" into Title Case
-  if (raw === raw.toLowerCase()) {
-    return raw
+  if (fallback === fallback.toLowerCase()) {
+    return fallback
       .split(/[-_]+/)
       .filter(Boolean)
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
   }
 
-  return raw;
+  return fallback;
 }
-
 export default function CharacterRoster({
   onCreateCharacter,
   onResumePlaythrough,
