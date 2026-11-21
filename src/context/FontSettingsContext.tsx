@@ -14,6 +14,8 @@ import {
 } from '@/data/readingPreferences';
 
 const STORAGE_KEY = 'mermaids-font-settings';
+const JELLYFISH_CURSOR_KEY = 'mermaids_jellyfish_cursor';
+const COLLAPSE_SCENE_NOTES_KEY = 'mermaids_collapse_scene_notes';
 const LOAD_ERROR = 'Your saved reading preferences could not be loaded.';
 const SAVE_ERROR = 'Your reading preferences could not be saved to your account.';
 
@@ -24,9 +26,13 @@ interface FontSettingsContextValue {
   fontFamilyClass: string;
   fontPx: string;
   syncError: string | null;
+  jellyfishCursor: boolean;
+  collapseSceneNotes: boolean;
   setFamily: (family: FontFamilyKey) => void;
   setSize: (size: FontSizeKey) => void;
   setLineHeight: (lineHeight: LineHeightKey) => void;
+  setJellyfishCursor: (enabled: boolean) => void;
+  setCollapseSceneNotes: (enabled: boolean) => void;
 }
 
 const FontSettingsContext = createContext<FontSettingsContextValue | undefined>(undefined);
@@ -37,6 +43,16 @@ function loadLocalPreferences(): ReadingPreferences {
     return raw ? toReadingPreferences(JSON.parse(raw) ?? {}) : DEFAULT_READING_PREFERENCES;
   } catch {
     return DEFAULT_READING_PREFERENCES;
+  }
+}
+
+function loadLocalFlag(key: string, fallback = false): boolean {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === null) return fallback;
+    return raw === 'true';
+  } catch {
+    return fallback;
   }
 }
 
@@ -61,6 +77,12 @@ export function FontSettingsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const userId = user?.id ?? null;
   const [prefs, setPrefs] = useState<ReadingPreferences>(loadLocalPreferences);
+  const [jellyfishCursor, setJellyfishCursorState] = useState<boolean>(() =>
+    loadLocalFlag(JELLYFISH_CURSOR_KEY, false),
+  );
+  const [collapseSceneNotes, setCollapseSceneNotesState] = useState<boolean>(() =>
+    loadLocalFlag(COLLAPSE_SCENE_NOTES_KEY, false),
+  );
   const [syncError, setSyncError] = useState<string | null>(null);
   const prefsRef = useRef(prefs);
 
@@ -78,6 +100,23 @@ export function FontSettingsProvider({ children }: { children: ReactNode }) {
     const lineHeightValue = LINE_HEIGHT_OPTIONS.find((o) => o.key === prefs.lineHeight)?.value ?? '1.75';
     document.documentElement.style.setProperty('--reading-line-height', lineHeightValue);
   }, [prefs]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(JELLYFISH_CURSOR_KEY, String(jellyfishCursor));
+    } catch {
+      // ignore write errors
+    }
+    document.documentElement.classList.toggle('jellyfish-cursor-active', jellyfishCursor);
+  }, [jellyfishCursor]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(COLLAPSE_SCENE_NOTES_KEY, String(collapseSceneNotes));
+    } catch {
+      // ignore write errors
+    }
+  }, [collapseSceneNotes]);
 
   useEffect(() => {
     if (!userId) {
@@ -136,6 +175,8 @@ export function FontSettingsProvider({ children }: { children: ReactNode }) {
     (lineHeight: LineHeightKey) => updatePreferences({ lineHeight }),
     [updatePreferences],
   );
+  const setJellyfishCursor = useCallback((enabled: boolean) => setJellyfishCursorState(enabled), []);
+  const setCollapseSceneNotes = useCallback((enabled: boolean) => setCollapseSceneNotesState(enabled), []);
 
   const value = useMemo<FontSettingsContextValue>(() => {
     const fontOption = FONT_OPTIONS.find((o) => o.key === prefs.family) ?? FONT_OPTIONS[1];
@@ -147,11 +188,25 @@ export function FontSettingsProvider({ children }: { children: ReactNode }) {
       fontFamilyClass: fontOption.className,
       fontPx: sizeOption.px,
       syncError,
+      jellyfishCursor,
+      collapseSceneNotes,
       setFamily,
       setSize,
       setLineHeight,
+      setJellyfishCursor,
+      setCollapseSceneNotes,
     };
-  }, [prefs, syncError, setFamily, setSize, setLineHeight]);
+  }, [
+    prefs,
+    syncError,
+    jellyfishCursor,
+    collapseSceneNotes,
+    setFamily,
+    setSize,
+    setLineHeight,
+    setJellyfishCursor,
+    setCollapseSceneNotes,
+  ]);
 
   return <FontSettingsContext.Provider value={value}>{children}</FontSettingsContext.Provider>;
 }
