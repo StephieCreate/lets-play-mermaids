@@ -385,7 +385,7 @@ export default function PlayScreen({ playthroughId, onBack, onSignIn, onReportBu
   const xp = typeof rawState.xp === 'number' ? rawState.xp : 0;
   const xpTarget = Math.max(100, level * 100); // Level 1 -> 100, Level 4 -> 400
 
-  const bondLevel = typeof rawState.bond_level === 'number' ? Math.max(1, rawState.bond_level) : 1;
+  const bondLevel = typeof rawState.bond_level === 'number' ? rawState.bond_level : 0;
   const bondXp = typeof rawState.bond_xp === 'number' ? rawState.bond_xp : 0;
   // Bond 1 -> 10 XP, Bond 2 -> 20 XP ... Bond 5 -> 50 XP
   const bondXpTarget = Math.max(10, bondLevel * 10);
