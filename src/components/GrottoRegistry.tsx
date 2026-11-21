@@ -182,7 +182,6 @@ export default function GrottoRegistry({ playthroughId, onSignIn }: GrottoRegist
         )}
       </div>
 
-      <section className="glass-panel min-w-0 rounded-2xl p-4 sm:p-8">
     <section className="glass-panel min-w-0 rounded-2xl p-4 sm:p-8">
       <div className="flex flex-col gap-4 border-b border-abyss-700/30 pb-5 sm:gap-5 sm:pb-6">
         <div>
