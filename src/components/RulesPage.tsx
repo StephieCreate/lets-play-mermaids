@@ -40,13 +40,6 @@ type RuleTab = {
   badge: 'always' | 'available' | 'dev' | 'opt-in';
 };
 
-// Matches Ticket 2/5 admin whitelist; Ticket 2 will swap this for `isAdmin` from useAuth().
-const ADMIN_EMAILS = new Set([
-  'chunmeiguiproduction@gmail.com',
-  'stephanielandrycreate@gmail.com',
-  'drxg0n.2008@gmail.com',
-]);
-
 const coreRules: RuleTab[] = [
   { slug: 'universal-core-engine', title: 'Universal Core Engine', available: true, badge: 'always' },
   { slug: 'universal-game-templates', title: 'Universal Game Templates', available: true, badge: 'always' },
@@ -144,8 +137,8 @@ function Badge({ kind }: { kind: RuleTab['badge'] }) {
 }
 
 export default function RulesPage({ onBack, onSignIn, embedded = false }: RulesPageProps) {
-  const { user, loading: authLoading } = useAuth();
-  const isWhitelistedAdmin = Boolean(user?.email && ADMIN_EMAILS.has(user.email.toLowerCase()));
+  const { user, loading: authLoading, isAdmin } = useAuth();
+  const isWhitelistedAdmin = isAdmin;
 
   const [subTab, setSubTab] = useState<RulesSubTab>('codex');
   const [mobileView, setMobileView] = useState<'list' | 'doc'>('list');

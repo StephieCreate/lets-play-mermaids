@@ -8,6 +8,7 @@ interface AuthContextValue {
   session: Session | null;
   user: User | null;
   loading: boolean;
+  isAdmin: boolean;
   isPasswordRecovery: boolean;
   clearPasswordRecovery: () => void;
   passwordAgeDays: number;
@@ -34,6 +35,7 @@ function computePasswordAgeDays(user: User | null): number {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
 
   useEffect(() => {
@@ -51,7 +53,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsPasswordRecovery(false);
       }
     });
-
     // Proactively refresh the session when the tab becomes visible again,
     // since browser background throttling can pause the auto-refresh timer.
     const handleVisibility = () => {
@@ -84,6 +85,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.clearInterval(refreshInterval);
     };
   }, []);
+
+  // Re-check admin status whenever the authenticated session changes
+  useEffect(() => {
+    if (!user) {
+      setIsAdmin(false);
+      return;
+    }
+    let cancelled = false;
+    supabase.rpc('is_admin').then(({ data, error }) => {
+      if (cancelled) return;
+      setIsAdmin(!error && data === true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -131,6 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         session,
         user,
         loading,
+        isAdmin,
         isPasswordRecovery,
         clearPasswordRecovery,
         passwordAgeDays,

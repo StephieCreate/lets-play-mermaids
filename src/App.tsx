@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Key, Type, Shield, Bug, Sparkles, Check, Compass, MessageCircle } from 'lucide-react';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabase';
 import { FontSettingsProvider } from '@/context/FontSettingsContext';
 import OceanBackground from '@/components/OceanBackground';
 import Header, { type AppTab } from '@/components/Header';
@@ -18,47 +19,9 @@ import BugReportModal from '@/components/BugReportModal';
 import UserSettingsModal from '@/components/UserSettingsModal';
 import PasswordUpdateModal from '@/components/PasswordUpdateModal';
 import Toast from '@/components/Toast';
+import NewsPanel, { type NewsPost } from '@/components/NewsPanel';
 
 type SettingsSubTab = 'ai-config' | 'display' | 'account';
-
-// Temporary static feed moved from Hero.tsx — Ticket 2 will swap this for live `public.news_posts` + Admin Post Creator.
-const INITIAL_NEWS_POSTS = [
-  {
-    id: 'phase-5',
-    phase: 'Phase 5',
-    title: 'Live Playtesting, Status Bars & Cartridge Hub',
-    content:
-      'The app is officially published and live for Discord playtesters, with full backend API key encryption locked in. New Feature Alert: Interactive status bars (Stm, HP, Lvl, and Bond) are now live at the top of the play screen! Since this is brand-new, please keep an eye on them to make sure they update smoothly with your turns—you can tap any pill to manually adjust your numbers or hit Sync from Save & Chat if they ever drift, and report any hiccups. Next up is an in-app Store section so playtesters can always grab the most current game cartridge file as mechanics are tuned. Down the road, it will include an optional "Pay What You Want" (up to $15) button to support development, though checkout won\'t be wired up until much later.',
-  },
-  {
-    id: 'phase-4',
-    phase: 'Phase 4',
-    title: 'Apexes Needing Testing',
-    content:
-      'Apexes are currently tested for female player characters under 9 ft: Kial, Severin, Ezra, and Malibu. All other sizes and gender ranges have not been tested for any Apexes yet. Ricsa and Idris still need extensive playtesting to determine whether they are stable or need Dev adjustments—Idris features a unique new mechanic in the Game Master system, and Ricsa pushes the waystation mechanics to their limits. Akuma and Vanna are currently being brainstormed and should be up within a month or two. Playtesters can message Stephie directly on Discord or use the in-app bug reporting button!',
-  },
-  {
-    id: 'phase-3',
-    phase: 'Phase 3',
-    title: 'Tetris Bag RNG & Markov Weather Active',
-    content:
-      'Replaced raw d20/d10 rolls with the Tetris Bag encounter deck and Markov Weather Fronts to ensure smooth meteorological transitions and eliminate 5-day death spirals.',
-  },
-  {
-    id: 'phase-2',
-    phase: 'Phase 2',
-    title: 'Multi-Model AI Configuration & Cost Estimator',
-    content:
-      'Added a BYOK cost estimator widget, local AI support (Ollama/LM Studio via Custom endpoints), and key-specific model preference dropdowns.',
-  },
-  {
-    id: 'phase-1',
-    phase: 'Phase 1',
-    title: 'Initial Alpha Launch',
-    content:
-      'Core rules integration, Grotto Registry splits, and robust DeepSeek Pro baseline logic fully established. Welcome to the deep ocean!',
-  },
-];
 
 const READ_NEWS_STORAGE_KEY = 'mermaids_read_news_ids';
 
@@ -74,7 +37,7 @@ function loadReadNewsIds(): string[] {
 }
 
 function AppContent() {
-  const { user, isPasswordRecovery, clearPasswordRecovery, isPasswordExpired } = useAuth();
+  const { user, isPasswordRecovery, clearPasswordRecovery, isPasswordExpired, isAdmin } = useAuth();
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [creationModalOpen, setCreationModalOpen] = useState(false);
   const [currentView, setCurrentView] = useState<'home' | 'play'>('home');
@@ -88,23 +51,72 @@ function AppContent() {
   const [rotationPromptSeen, setRotationPromptSeen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [readNewsIds, setReadNewsIds] = useState<string[]>(loadReadNewsIds);
+  const [newsPosts, setNewsPosts] = useState<NewsPost[]>([]);
+  const [newsLoading, setNewsLoading] = useState(true);
+  const [newsError, setNewsError] = useState<string | null>(null);
 
-  const hasUnreadNews = INITIAL_NEWS_POSTS.some((post) => !readNewsIds.includes(post.id));
+  const hasUnreadNews = newsPosts.some((post) => !readNewsIds.includes(post.id));
+
+  const fetchNewsPosts = useCallback(async () => {
+    setNewsLoading(true);
+    setNewsError(null);
+    const { data, error: fetchError } = await supabase
+      .from('news_posts')
+      .select('id, slug, phase, title, content, created_at, created_by')
+      .order('created_at', { ascending: false });
+    if (fetchError) {
+      console.error('Failed to load news posts', fetchError);
+      setNewsError('The news could not be loaded. Please try again.');
+    } else {
+      setNewsPosts((data ?? []) as NewsPost[]);
+    }
+    setNewsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    void fetchNewsPosts();
+  }, [fetchNewsPosts]);
+
+  // Merge locally-stored read IDs with the account's synced list on sign-in
+  useEffect(() => {
+    if (!user) return;
+    const accountReadIds = Array.isArray(user.user_metadata?.read_news_ids)
+      ? (user.user_metadata.read_news_ids as string[])
+      : [];
+    const merged = Array.from(new Set([...loadReadNewsIds(), ...accountReadIds]));
+    if (merged.length > accountReadIds.length) {
+      localStorage.setItem(READ_NEWS_STORAGE_KEY, JSON.stringify(merged));
+      setReadNewsIds(merged);
+      void supabase.auth.updateUser({ data: { read_news_ids: merged } });
+    } else if (merged.length > loadReadNewsIds().length) {
+      localStorage.setItem(READ_NEWS_STORAGE_KEY, JSON.stringify(merged));
+      setReadNewsIds(merged);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  const persistReadIds = (next: string[]) => {
+    localStorage.setItem(READ_NEWS_STORAGE_KEY, JSON.stringify(next));
+    setReadNewsIds(next);
+    if (user) {
+      void supabase.auth.updateUser({ data: { read_news_ids: next } });
+    }
+  };
 
   const markNewsRead = useCallback((id: string) => {
     setReadNewsIds((prev) => {
       if (prev.includes(id)) return prev;
       const next = [...prev, id];
-      localStorage.setItem(READ_NEWS_STORAGE_KEY, JSON.stringify(next));
+      persistReadIds(next);
       return next;
     });
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   const markAllNewsRead = useCallback(() => {
-    const allIds = INITIAL_NEWS_POSTS.map((p) => p.id);
-    setReadNewsIds(allIds);
-    localStorage.setItem(READ_NEWS_STORAGE_KEY, JSON.stringify(allIds));
-  }, []);
+    persistReadIds(newsPosts.map((p) => p.id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, newsPosts]);
 
   // Apply persisted Jellyfish Cursor preference on mount
   useEffect(() => {
@@ -221,77 +233,19 @@ function AppContent() {
                 </section>
               )}
 
-              {/* NEWS & UPDATES SHELL — Ready for Ticket 2 `public.news_posts` & Admin Post Creator */}
+              {/* NEWS & UPDATES — live `public.news_posts` feed + Admin Post Creator */}
               {activeTab === 'news' && (
-                <section className="mx-auto max-w-3xl space-y-5 py-4">
-                  <div className="flex flex-wrap items-end justify-between gap-3">
-                    <div>
-                      <div className="mb-1 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-abyss-300">
-                        <Sparkles className="h-4 w-4 text-foam-400" />
-                        <span>Alpha / Beta Phase Log</span>
-                      </div>
-                      <h2 className="font-display text-3xl font-bold text-pearl sm:text-4xl">
-                        News &amp; Updates
-                      </h2>
-                    </div>
-
-                    {hasUnreadNews && (
-                      <button
-                        type="button"
-                        onClick={markAllNewsRead}
-                        className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-abyss-400/35 bg-abyss-500/25 px-3.5 py-2 text-xs font-medium text-pearl transition-all hover:bg-abyss-500/40"
-                      >
-                        <Check className="h-3.5 w-3.5" />
-                        <span>Mark All as Read</span>
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="space-y-4">
-                    {INITIAL_NEWS_POSTS.map((post) => {
-                      const isUnread = !readNewsIds.includes(post.id);
-                      return (
-                        <article
-                          key={post.id}
-                          className={`glass-panel rounded-2xl p-5 transition-all sm:p-6 ${
-                            isUnread ? 'border-coral-500/40' : ''
-                          }`}
-                        >
-                          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <span className="rounded-full border border-abyss-400/30 bg-abyss-800/60 px-2.5 py-0.5 font-mono text-[11px] text-abyss-200">
-                                {post.phase}
-                              </span>
-                              {isUnread && (
-                                <span className="rounded-full bg-coral-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-coral-300 ring-1 ring-coral-500/40">
-                                  New
-                                </span>
-                              )}
-                            </div>
-
-                            {isUnread && (
-                              <button
-                                type="button"
-                                onClick={() => markNewsRead(post.id)}
-                                className="inline-flex items-center gap-1 rounded-lg border border-abyss-400/30 bg-abyss-700/30 px-2.5 py-1 text-xs font-medium text-pearl transition-colors hover:bg-abyss-600/40"
-                              >
-                                <Check className="h-3 w-3" />
-                                <span>Read</span>
-                              </button>
-                            )}
-                          </div>
-
-                          <h3 className="font-display text-lg font-semibold text-pearl sm:text-xl">
-                            {post.title}
-                          </h3>
-                          <p className="mt-2 text-sm leading-relaxed text-muted">
-                            {post.content}
-                          </p>
-                        </article>
-                      );
-                    })}
-                  </div>
-                </section>
+                <NewsPanel
+                  posts={newsPosts}
+                  loading={newsLoading}
+                  error={newsError}
+                  readNewsIds={readNewsIds}
+                  isAdmin={isAdmin}
+                  user={user}
+                  onMarkRead={markNewsRead}
+                  onMarkAllRead={markAllNewsRead}
+                  onPostsChanged={fetchNewsPosts}
+                />
               )}
 
               {/* PLAYER SETTINGS UMBRELLA HUB */}
