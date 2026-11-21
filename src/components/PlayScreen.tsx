@@ -91,7 +91,7 @@ function parseStatsFromSaveLog(logText: string): ParsedStats {
 
   const bondLvlMatch = logText.match(/\*\*Bond Level:\*\*\s*(\d+)/i);
   if (bondLvlMatch) {
-    parsed.bond_level = parseInt(bondLvlMatch[1], 10);
+    parsed.bond_level = Math.max(1, parseInt(bondLvlMatch[1], 10));
   }
 
   const bondXpMatch = logText.match(/\*\*Bond XP:\*\*\s*(\d+)\s*\/\s*(\d+)/i);
@@ -134,7 +134,7 @@ function parseStatsFromChatMessages(messages: ChatMessage[], current: ParsedStat
       }
       const bond = trackerLine.match(/Bond\s*\[?\s*(\d+)\s*\]?\s*\(\s*(?:Bond\s*)?XP\s*\[?\s*(\d+)\s*\/\s*(\d+)/i);
       if (bond) {
-        result.bond_level = parseInt(bond[1], 10);
+        result.bond_level = Math.max(1, parseInt(bond[1], 10));
         result.bond_xp = parseInt(bond[2], 10);
       }
     }
@@ -165,12 +165,12 @@ function parseStatsFromChatMessages(messages: ChatMessage[], current: ParsedStat
     );
     if (bondMatches.length > 0) {
       const last = bondMatches[bondMatches.length - 1];
-      result.bond_level = parseInt(last[1], 10);
+      result.bond_level = Math.max(1, parseInt(last[1], 10));
       result.bond_xp = parseInt(last[2], 10);
     } else {
       const bondLvlOnly = text.match(/\b(?:Current\s+Bond|Bond\s*(?:Level|Tier))\b[^.\n]{0,25}?(?:Level\s*|Tier\s*)?(\d+)/i);
       if (bondLvlOnly) {
-        result.bond_level = parseInt(bondLvlOnly[1], 10);
+        result.bond_level = Math.max(1, parseInt(bondLvlOnly[1], 10));
       }
       const bondXpOnly = text.match(/\bBond\s*XP\b[^\n]*?(\d+)\s*\/\s*(\d+)/i);
       if (bondXpOnly) {

@@ -139,7 +139,7 @@ The player has requested a GENTLE DAY for this turn only. Temporarily soften the
   const maxHp = (req.storyState["max_hp"] as number) ?? 10;
   const curLvl = (req.storyState["level"] as number) ?? 1;
   const curXp = (req.storyState["xp"] as number) ?? 0;
-  const curBond = (req.storyState["bond_level"] as number) ?? 0;
+  const curBond = Math.max(1, (req.storyState["bond_level"] as number) ?? 1);
   const curBondXp = (req.storyState["bond_xp"] as number) ?? 0;
 
   const storyStateSection = [
@@ -148,7 +148,7 @@ The player has requested a GENTLE DAY for this turn only. Temporarily soften the
     `- Stamina: ${curStm}/${maxStm}`,
     `- Health (HP): ${curHp}/${maxHp}`,
     `- Global Level: ${curLvl} (XP: ${curXp}/${curLvl * 100})`,
-    `- Bond Level: ${curBond} (Bond XP: ${curBondXp}/${(curBond + 1) * 10})`,
+    `- Bond Level: ${curBond} (Bond XP: ${curBondXp}/${Math.max(1, curBond) * 10})`,
     `- Raw State: ${JSON.stringify(req.storyState)}`,
   ].join("\n");
 
@@ -366,5 +366,3 @@ export function extractRecentDaysTopDown(content: string, playerInput: string, d
   return finalContent.trim();
 }
 
-// Re-export for the keyword-reference scan in index.ts
-export { SEASON_KEYWORDS };

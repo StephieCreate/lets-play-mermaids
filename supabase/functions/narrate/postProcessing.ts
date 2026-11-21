@@ -81,7 +81,7 @@ export function applyStatUpdatesFromNarration(
     const xMatch = dailySaveLog.match(/\*\*Current XP:\*\*\s*(\d+)\s*\/\s*(\d+)\s*to\s*next/i);
     if (xMatch) storyState["xp"] = parseInt(xMatch[1], 10);
     const bLvl = dailySaveLog.match(/\*\*Bond Level:\*\*\s*(\d+)/i);
-    if (bLvl) storyState["bond_level"] = parseInt(bLvl[1], 10);
+    if (bLvl) storyState["bond_level"] = Math.max(1, parseInt(bLvl[1], 10));
     const bXp = dailySaveLog.match(/\*\*Bond XP:\*\*\s*(\d+)\s*\/\s*(\d+)/i);
     if (bXp) storyState["bond_xp"] = parseInt(bXp[1], 10);
   }
@@ -109,7 +109,7 @@ export function applyStatUpdatesFromNarration(
     }
     const bond = trackerLine.match(/Bond\s*\[?\s*(\d+)\s*\]?\s*\(\s*(?:Bond\s*)?XP\s*\[?\s*(\d+)\s*\/\s*(\d+)/i);
     if (bond) {
-      storyState["bond_level"] = parseInt(bond[1], 10);
+      storyState["bond_level"] = Math.max(1, parseInt(bond[1], 10));
       storyState["bond_xp"] = parseInt(bond[2], 10);
     }
   }
@@ -118,15 +118,15 @@ export function applyStatUpdatesFromNarration(
   const naturalBondTot = narration.match(/Current Bond:\s*(?:Level\s*)?(\d+)\s*\(\s*(\d+)\s*\/\s*(\d+)/i)
     ?? narration.match(/Bond Level:\s*(\d+)[^\n]*?\(\s*(\d+)\s*\/\s*(\d+)/i);
   if (naturalBondTot) {
-    storyState["bond_level"] = parseInt(naturalBondTot[1], 10);
+    storyState["bond_level"] = Math.max(1, parseInt(naturalBondTot[1], 10));
     storyState["bond_xp"] = parseInt(naturalBondTot[2], 10);
   } else {
     // Fallback if AI only wrote "+1 Bond XP" without printing the new total
     const bondDelta = narration.match(/([+-]\d+)\s*Bond\s*XP/i);
     if (bondDelta && !trackerLine) {
-      let bLvl = (storyState["bond_level"] as number) ?? 0;
+      let bLvl = Math.max(1, (storyState["bond_level"] as number) ?? 1);
       let bXp = ((storyState["bond_xp"] as number) ?? 0) + parseInt(bondDelta[1], 10);
-      const target = Math.max(10, (bLvl + 1) * 10);
+      const target = Math.max(10, bLvl * 10);
       if (bXp >= target && bLvl < 20) {
         bXp -= target;
         bLvl += 1;

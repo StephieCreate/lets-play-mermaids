@@ -9,8 +9,7 @@ import {
   SEASON_KEYWORDS,
   apexRuleSlug,
   triadSurrogateSlug,
-} from "./types.ts";
-import type { NarrateRequest, NarrativeSummaryRow } from "./types.ts";
+} from "./types.ts";import type { NarrateRequest, NarrativeSummaryRow } from "./types.ts";
 import {
   applyCommandInterceptors,
   buildTimePassageDirective,
@@ -127,9 +126,6 @@ Deno.serve(async (req: Request) => {
     let hardModeActive = false;
     let plotWishlist = "";
     let activeExtras: { title: string; content: string; category: string }[] = [];
-    let lockedSaveLogWeather: string | null = null;
-    let staminaPendingInSaveLog = false;
-
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Gather all rule-document slugs we need for this turn.
@@ -204,18 +200,21 @@ Deno.serve(async (req: Request) => {
 
     // 1. Check if the Save Log already locked in today's Ocean Condition
     const saveLogWeatherMatch = dailySaveLog.match(/Ocean Condition:\s*([^\n|*]+)/i);
-    lockedSaveLogWeather =
+    const lockedSaveLogWeather =
       saveLogWeatherMatch && !/pending|none|tbd/i.test(saveLogWeatherMatch[1])
         ? saveLogWeatherMatch[1].trim()
         : null;
 
     // 2. Check if the Save Log explicitly noted that the -2 morning stamina cost is still pending
-    staminaPendingInSaveLog = /pending at Proceed/i.test(dailySaveLog);
+    const staminaPendingInSaveLog = /pending at Proceed/i.test(dailySaveLog);
 
     if (lockedSaveLogWeather && body.playerInput.includes("The player has typed Proceed")) {
       body.playerInput += `\n\n[WEATHER LOCK — ENFORCE SAVE LOG]: Today's Ocean Condition is already locked in the [DAILY SAVE LOG] as:   "${lockedSaveLogWeather}". You are STRICTLY FORBIDDEN from rolling or substituting a different weather condition (such as Plankton Bloom). Use "${lockedSaveLogWeather}" and its exact modifiers in your OOC block and narrative.`;
     }
 
+    if (staminaPendingInSaveLog && body.playerInput.includes("The player has typed Proceed")) {
+      body.playerInput += `\n\n[STAMINA PENDING — ENFORCE SAVE LOG]: The [DAILY SAVE LOG] notes the -2 Morning Wake-Up stamina cost is still "pending at Proceed". Deduct the -2 morning cost exactly once this turn per the [STAMINA GUARD] and do not deduct it again.`;
+    }
     // 3. Inject Time Clock Telemetry ONLY during active gameplay turns
     // (Completely skips Maintenance Window / WAITING COMMAND, Sleep, Save, Summary, and Proceed)
     if (
