@@ -1,5 +1,23 @@
-import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Check, CheckCircle2, Clipboard, ChevronDown, Edit3, FileText, LockKeyhole, Search, Waves } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ArrowLeft,
+  BookOpen,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Clipboard,
+  Edit3,
+  FileText,
+  LockKeyhole,
+  MessageSquare,
+  Search,
+  ShoppingBag,
+  Terminal,
+  Waves,
+  X,
+} from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import type { RuleDocument } from '@/types/database';
@@ -12,6 +30,8 @@ interface RulesPageProps {
   embedded?: boolean;
 }
 
+type RulesSubTab = 'codex' | 'helper' | 'store' | 'dev';
+
 type RuleTab = {
   slug: string;
   title: string;
@@ -20,10 +40,22 @@ type RuleTab = {
   badge: 'always' | 'available' | 'dev' | 'opt-in';
 };
 
+// Matches Ticket 2/5 admin whitelist; Ticket 2 will swap this for `isAdmin` from useAuth().
+const ADMIN_EMAILS = new Set([
+  'chunmeiguiproduction@gmail.com',
+  'stephanielandrycreate@gmail.com',
+  'drxg0n.2008@gmail.com',
+]);
+
 const coreRules: RuleTab[] = [
   { slug: 'universal-core-engine', title: 'Universal Core Engine', available: true, badge: 'always' },
   { slug: 'universal-game-templates', title: 'Universal Game Templates', available: true, badge: 'always' },
-  { slug: 'medicinal-algae-quick-reference', title: 'Medicinal Algae Quick Reference Guide', available: true, badge: 'always' },
+  {
+    slug: 'medicinal-algae-quick-reference',
+    title: 'Medicinal Algae Quick Reference Guide',
+    available: true,
+    badge: 'always',
+  },
 ];
 
 const apexPlugins: RuleTab[] = [
@@ -64,39 +96,42 @@ const emptyDrafts: Drafts = allTabs.reduce((drafts, tab) => {
 }, {} as Drafts);
 
 function toDrafts(documents: RuleDocument[]): Drafts {
-  return documents.reduce<Drafts>((drafts, document) => {
-    if (document.slug in drafts) {
-      drafts[document.slug] = document.content;
-    }
-    return drafts;
-  }, { ...emptyDrafts });
+  return documents.reduce<Drafts>(
+    (drafts, document) => {
+      if (document.slug in drafts) {
+        drafts[document.slug] = document.content;
+      }
+      return drafts;
+    },
+    { ...emptyDrafts },
+  );
 }
 
 function Badge({ kind }: { kind: RuleTab['badge'] }) {
   if (kind === 'always') {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-500/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-emerald-300">
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-emerald-300">
         <CheckCircle2 className="h-3 w-3" />
-        Always active
+        Active
       </span>
     );
   }
   if (kind === 'opt-in') {
     return (
-      <span className="shrink-0 rounded-full border border-teal-400/30 bg-teal-500/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-teal-300">
+      <span className="shrink-0 rounded-full border border-teal-400/30 bg-teal-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-teal-300">
         Opt-in
       </span>
     );
   }
   if (kind === 'available') {
     return (
-      <span className="shrink-0 rounded-full border border-sky-400/30 bg-sky-500/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-sky-300">
+      <span className="shrink-0 rounded-full border border-sky-400/30 bg-sky-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-sky-300">
         Available
       </span>
     );
   }
   return (
-    <span className="shrink-0 rounded-full border border-amber-400/30 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-amber-300">
+    <span className="shrink-0 rounded-full border border-amber-400/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-amber-300">
       In dev
     </span>
   );
@@ -104,24 +139,44 @@ function Badge({ kind }: { kind: RuleTab['badge'] }) {
 
 export default function RulesPage({ onBack, onSignIn, embedded = false }: RulesPageProps) {
   const { user, loading: authLoading } = useAuth();
+  const isWhitelistedAdmin = Boolean(user?.email && ADMIN_EMAILS.has(user.email.toLowerCase()));
+
+  const [subTab, setSubTab] = useState<RulesSubTab>('codex');
+  const [mobileView, setMobileView] = useState<'list' | 'doc'>('list');
+
   const [activeSlug, setActiveSlug] = useState<string>(coreRules[0].slug);
   const [drafts, setDrafts] = useState<Drafts>({ ...emptyDrafts });
+  const [preEditContent, setPreEditContent] = useState<string>('');
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Find & Replace state (hidden by default while editing)
+  const [showFindReplace, setShowFindReplace] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [replaceText, setReplaceText] = useState('');
+  const [currentMatchIdx, setCurrentMatchIdx] = useState(0);
+
+  // Core Rules starts expanded; secondary sections start collapsed so mobile list stays scannable
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     'core-rules': false,
-    'apex-plugins': false,
-    'triad-tabs': false,
-    'npc-tabs': false,
+    'apex-plugins': true,
+    'triad-tabs': true,
+    'npc-tabs': true,
   });
+
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const activeTab = allTabs.find((tab) => tab.slug === activeSlug) ?? coreRules[0];
   const activeContent = drafts[activeSlug] ?? '';
+
+  // Safeguard: never allow non-admins to land on Dev Mode
+  useEffect(() => {
+    if (!isWhitelistedAdmin && subTab === 'dev') {
+      setSubTab('codex');
+    }
+  }, [isWhitelistedAdmin, subTab]);
 
   useEffect(() => {
     if (!user) {
@@ -157,7 +212,53 @@ export default function RulesPage({ onBack, onSignIn, embedded = false }: RulesP
     setCopied(false);
     setSearchText('');
     setReplaceText('');
+    setCurrentMatchIdx(0);
+    setShowFindReplace(false);
   }, [activeSlug]);
+
+  // Compute all case-insensitive match positions in the active document
+  const matchPositions = useMemo(() => {
+    if (!searchText) return [];
+    const positions: number[] = [];
+    const haystack = activeContent.toLowerCase();
+    const needle = searchText.toLowerCase();
+    let idx = haystack.indexOf(needle);
+    while (idx !== -1) {
+      positions.push(idx);
+      idx = haystack.indexOf(needle, idx + needle.length);
+    }
+    return positions;
+  }, [activeContent, searchText]);
+
+  // Keep currentMatchIdx in bounds when text or query changes
+  useEffect(() => {
+    if (matchPositions.length === 0) {
+      setCurrentMatchIdx(0);
+    } else if (currentMatchIdx >= matchPositions.length) {
+      setCurrentMatchIdx(0);
+    }
+  }, [matchPositions.length, currentMatchIdx]);
+
+  const scrollAndSelectMatch = (pos: number, length: number) => {
+    const textarea = editorRef.current;
+    if (!textarea) return;
+
+    textarea.focus();
+    textarea.setSelectionRange(pos, pos + length);
+
+    // Estimate line offset so the textarea scrolls the highlighted match into view
+    const linesBefore = activeContent.slice(0, pos).split('\n').length - 1;
+    const approxLineHeight = 26;
+    const targetScrollTop = Math.max(0, linesBefore * approxLineHeight - textarea.clientHeight / 3);
+    textarea.scrollTop = targetScrollTop;
+  };
+
+  const handleFindStep = (direction: 1 | -1) => {
+    if (matchPositions.length === 0) return;
+    const nextIdx = (currentMatchIdx + direction + matchPositions.length) % matchPositions.length;
+    setCurrentMatchIdx(nextIdx);
+    scrollAndSelectMatch(matchPositions[nextIdx], searchText.length);
+  };
 
   const handleRulesImported = (imported: CartridgeRule[]) => {
     setDrafts((current) => ({
@@ -176,26 +277,47 @@ export default function RulesPage({ onBack, onSignIn, embedded = false }: RulesP
     window.setTimeout(() => setCopied(false), 1800);
   };
 
-  const replaceNext = () => {
-    if (!searchText) return;
-    const start = editorRef.current?.selectionEnd ?? 0;
-    const nextIndex = activeContent.indexOf(searchText, start) >= 0
-      ? activeContent.indexOf(searchText, start)
-      : activeContent.indexOf(searchText);
-    if (nextIndex < 0) return;
+  const handleStartEdit = () => {
+    if (!user) {
+      onSignIn();
+      return;
+    }
+    setPreEditContent(activeContent);
+    setEditing(true);
+    setShowFindReplace(false);
+  };
 
-    updateActiveContent(
-      `${activeContent.slice(0, nextIndex)}${replaceText}${activeContent.slice(nextIndex + searchText.length)}`,
-    );
+  const handleCancelEdit = () => {
+    updateActiveContent(preEditContent);
+    setEditing(false);
+    setShowFindReplace(false);
+    setError(null);
+  };
+
+  const replaceCurrent = () => {
+    if (!searchText || matchPositions.length === 0) return;
+    const safeIdx = Math.min(currentMatchIdx, matchPositions.length - 1);
+    const pos = matchPositions[safeIdx];
+
+    const updated =
+      activeContent.slice(0, pos) + replaceText + activeContent.slice(pos + searchText.length);
+    updateActiveContent(updated);
+
     window.requestAnimationFrame(() => {
-      editorRef.current?.focus();
-      editorRef.current?.setSelectionRange(nextIndex, nextIndex + replaceText.length);
+      const textarea = editorRef.current;
+      if (!textarea) return;
+      textarea.focus();
+      textarea.setSelectionRange(pos, pos + replaceText.length);
     });
   };
 
   const replaceAll = () => {
-    if (!searchText) return;
-    updateActiveContent(activeContent.split(searchText).join(replaceText));
+    if (!searchText || matchPositions.length === 0) return;
+    // Escape regex special characters for case-insensitive global replace
+    const escaped = searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const updated = activeContent.replace(new RegExp(escaped, 'gi'), replaceText);
+    updateActiveContent(updated);
+    setCurrentMatchIdx(0);
   };
 
   const handleAccept = async () => {
@@ -207,7 +329,12 @@ export default function RulesPage({ onBack, onSignIn, embedded = false }: RulesP
     setSaving(true);
     setError(null);
     const { error: saveError } = await supabase.from('rule_documents').upsert(
-      { slug: activeSlug, title: activeTab.title, content: activeContent, updated_at: new Date().toISOString() },
+      {
+        slug: activeSlug,
+        title: activeTab.title,
+        content: activeContent,
+        updated_at: new Date().toISOString(),
+      },
       { onConflict: 'user_id,slug' },
     );
 
@@ -216,6 +343,7 @@ export default function RulesPage({ onBack, onSignIn, embedded = false }: RulesP
       setError('Your changes could not be saved. Please try again.');
     } else {
       setEditing(false);
+      setShowFindReplace(false);
     }
     setSaving(false);
   };
@@ -224,6 +352,9 @@ export default function RulesPage({ onBack, onSignIn, embedded = false }: RulesP
     if (!tab.available) return;
     setActiveSlug(tab.slug);
     setEditing(false);
+    setShowFindReplace(false);
+    setMobileView('doc');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const renderTabButton = (tab: RuleTab) => {
@@ -232,20 +363,21 @@ export default function RulesPage({ onBack, onSignIn, embedded = false }: RulesP
     return (
       <button
         key={tab.slug}
+        type="button"
         onClick={() => selectTab(tab)}
         disabled={disabled}
-        className={`flex w-full items-center justify-between gap-3 rounded-xl px-4 py-3.5 text-left text-sm font-medium transition-all ${
+        className={`flex w-full items-center justify-between gap-3 rounded-xl px-3.5 py-3 text-left text-sm font-medium transition-all ${
           selected
             ? 'bg-abyss-500/25 text-pearl shadow-inner shadow-abyss-300/5'
             : disabled
-              ? 'cursor-not-allowed text-muted/50'
+              ? 'cursor-not-allowed text-muted/45'
               : 'text-muted hover:bg-abyss-800/50 hover:text-pearl'
         }`}
       >
         <span className="min-w-0">
-          <span className="block">{tab.title}</span>
+          <span className="block truncate">{tab.title}</span>
           {tab.subtitle && (
-            <span className="mt-0.5 block text-xs text-current/70">{tab.subtitle}</span>
+            <span className="mt-0.5 block truncate text-xs text-current/70">{tab.subtitle}</span>
           )}
         </span>
         <Badge kind={tab.badge} />
@@ -253,175 +385,500 @@ export default function RulesPage({ onBack, onSignIn, embedded = false }: RulesP
     );
   };
 
+  const categoryLabel =
+    activeTab.badge === 'always'
+      ? 'Core reference'
+      : activeTab.badge === 'opt-in' && activeTab.slug.startsWith('triad-')
+        ? 'Triad appendix'
+        : activeTab.badge === 'opt-in' && activeTab.slug.startsWith('npc-')
+          ? 'NPC appendix'
+          : activeTab.badge === 'available' && activeTab.slug.startsWith('triad-')
+            ? 'Triad surrogate'
+            : 'Apex plugin';
+
   return (
-    <main className={`relative z-10 overflow-hidden px-3 pb-16 ${embedded ? 'pt-4 sm:pt-6' : 'min-h-screen pt-28 sm:pb-24 sm:pt-32'} lg:px-8`}>
+    <main
+      className={`relative z-10 ${
+        embedded ? 'pt-2 pb-10 sm:pt-4' : 'min-h-screen px-3 pt-24 pb-16 sm:pt-28 lg:px-8'
+      }`}
+    >
       <div className="mx-auto max-w-6xl">
         {!embedded && (
           <button
+            type="button"
             onClick={onBack}
-            className="group mb-8 inline-flex min-h-11 items-center gap-2 text-sm font-medium text-muted transition-colors hover:text-pearl sm:mb-10"
+            className="group mb-6 inline-flex min-h-11 items-center gap-2 text-sm font-medium text-muted transition-colors hover:text-pearl"
           >
             <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
             Back to the ocean
           </button>
         )}
 
-        <div className={`max-w-3xl ${embedded ? 'mb-6' : 'mb-8 sm:mb-10'}`}>
-          <div className={`flex items-center gap-3 text-abyss-300/60 ${embedded ? 'mb-3' : 'mb-4 sm:mb-5'}`}>
-            <FileText className="h-5 w-5" />
-            <span className="text-xs font-semibold uppercase tracking-[0.24em]">The Codex</span>
+        {/* Hide main header on mobile when drilled into a document so editor gets maximum screen */}
+        <div className={`${subTab === 'codex' && mobileView === 'doc' ? 'hidden lg:block' : 'block'} mb-5`}>
+          <div className="mb-2 flex items-center gap-2.5 text-abyss-300/65">
+            <FileText className="h-4 w-4" />
+            <span className="text-xs font-semibold uppercase tracking-[0.22em]">The Codex</span>
           </div>
-          <h1 className={`font-display font-semibold leading-[1.08] text-pearl text-glow-soft ${embedded ? 'text-3xl sm:text-4xl' : 'text-4xl sm:text-6xl'}`}>
+          <h1 className="font-display text-3xl font-semibold leading-tight text-pearl text-glow-soft sm:text-4xl">
             Rules of the Deep
           </h1>
-          <p className={`leading-relaxed text-muted ${embedded ? 'mt-3 text-sm sm:text-base' : 'mt-4 text-base sm:mt-5 sm:text-lg'}`}>
-Your core references, apex plugin rules, and triad opt-in appendix for building and playing stories beneath the waves.
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
+            Core references, apex plugins, cartridge store, and your rules helper — all in one place.
           </p>
         </div>
 
-        {user && (
-          <div className="mb-6 max-w-3xl">
-            <GameCartridgeControls userId={user.id} onRulesImported={handleRulesImported} />
-          </div>
-        )}
+        {/* SUB-TAB PILL STRIP */}
+        <div
+          className={`${
+            subTab === 'codex' && mobileView === 'doc' ? 'hidden lg:flex' : 'flex'
+          } glass-panel mb-6 items-center gap-1 rounded-2xl p-1.5`}
+        >
+          <button
+            type="button"
+            onClick={() => setSubTab('codex')}
+            className={`flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-xs font-medium transition-all sm:gap-2 sm:px-3 sm:text-sm ${
+              subTab === 'codex'
+                ? 'bg-abyss-500/35 text-pearl shadow-sm'
+                : 'text-muted hover:bg-abyss-800/40 hover:text-pearl'
+            }`}
+          >
+            <BookOpen className="h-4 w-4 shrink-0" />
+            <span>Codex</span>
+          </button>
 
-        <div className="grid gap-4 lg:grid-cols-[17rem_minmax(0,1fr)] lg:gap-6 lg:items-start">
-          <nav className="glass-panel rounded-2xl p-2" aria-label="Rule tabs">
-            {([
-              { key: 'core-rules', label: 'Core rules', tabs: coreRules },
-              { key: 'apex-plugins', label: 'Apex plugins', tabs: apexPlugins },
-              { key: 'triad-tabs', label: 'Triad opt-in', tabs: triadTabs },
-              { key: 'npc-tabs', label: 'NPC opt-in', tabs: npcTabs },
-            ] as const).map((section, sectionIndex) => {
-              const collapsed = collapsedSections[section.key];
-              return (
-                <div key={section.key} className={sectionIndex > 0 ? 'pt-1' : ''}>
+          <button
+            type="button"
+            onClick={() => setSubTab('helper')}
+            className={`flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-xs font-medium transition-all sm:gap-2 sm:px-3 sm:text-sm ${
+              subTab === 'helper'
+                ? 'bg-abyss-500/35 text-pearl shadow-sm'
+                : 'text-muted hover:bg-abyss-800/40 hover:text-pearl'
+            }`}
+          >
+            <MessageSquare className="h-4 w-4 shrink-0" />
+            <span>Helper AI</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSubTab('store')}
+            className={`flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-xs font-medium transition-all sm:gap-2 sm:px-3 sm:text-sm ${
+              subTab === 'store'
+                ? 'bg-abyss-500/35 text-pearl shadow-sm'
+                : 'text-muted hover:bg-abyss-800/40 hover:text-pearl'
+            }`}
+          >
+            <ShoppingBag className="h-4 w-4 shrink-0" />
+            <span>Store</span>
+          </button>
+
+          {/* HIDDEN ADMIN-ONLY DEV MODE TAB — never rendered in DOM for non-admins */}
+          {isWhitelistedAdmin && (
+            <button
+              type="button"
+              onClick={() => setSubTab('dev')}
+              className={`flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-xs font-medium transition-all sm:gap-2 sm:px-3 sm:text-sm ${
+                subTab === 'dev'
+                  ? 'border border-amber-400/40 bg-amber-500/20 text-amber-200 shadow-sm'
+                  : 'text-amber-300/75 hover:bg-amber-500/10 hover:text-amber-200'
+              }`}
+            >
+              <Terminal className="h-4 w-4 shrink-0" />
+              <span>Dev Mode</span>
+            </button>
+          )}
+        </div>
+
+        {/* ==================== SUB-TAB 1: CODEX ==================== */}
+        {subTab === 'codex' && (
+          <div className="grid gap-4 lg:grid-cols-[17.5rem_minmax(0,1fr)] lg:items-start lg:gap-6">
+            {/* STEP A (Mobile Directory) / Left Column (Desktop) */}
+            <nav
+              className={`glass-panel rounded-2xl p-2 ${mobileView === 'doc' ? 'hidden lg:block' : 'block'}`}
+              aria-label="Rule tabs"
+            >
+              {(
+                [
+                  { key: 'core-rules', label: 'Core rules', tabs: coreRules },
+                  { key: 'apex-plugins', label: 'Apex plugins', tabs: apexPlugins },
+                  { key: 'triad-tabs', label: 'Triad opt-in', tabs: triadTabs },
+                  { key: 'npc-tabs', label: 'NPC opt-in', tabs: npcTabs },
+                ] as const
+              ).map((section, sectionIndex) => {
+                const collapsed = collapsedSections[section.key];
+                return (
+                  <div key={section.key} className={sectionIndex > 0 ? 'mt-1 border-t border-abyss-700/25 pt-2' : ''}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCollapsedSections((prev) => ({
+                          ...prev,
+                          [section.key]: !prev[section.key],
+                        }))
+                      }
+                      className="flex min-h-10 w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-abyss-300/75 transition-colors hover:bg-abyss-800/35 hover:text-abyss-200"
+                      aria-expanded={!collapsed}
+                    >
+                      <span>{section.label}</span>
+                      <ChevronDown
+                        className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${
+                          collapsed ? '-rotate-90' : ''
+                        }`}
+                      />
+                    </button>
+                    {!collapsed && (
+                      <div className="flex flex-col gap-1 pb-1 pt-1">
+                        {section.tabs.map(renderTabButton)}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </nav>
+
+            {/* STEP B (Mobile Fullscreen Doc) / Right Column (Desktop) */}
+            <section
+              className={`glass-panel min-w-0 rounded-2xl p-4 sm:p-6 lg:p-8 ${
+                mobileView === 'list' ? 'hidden lg:block' : 'block'
+              }`}
+            >
+              {/* Sticky Action Bar (pinned while scrolling/editing on phone) */}
+              <div className="sticky top-14 z-20 -mx-4 -mt-4 mb-5 rounded-t-2xl border-b border-abyss-700/30 bg-abyss-950/90 px-4 py-3 backdrop-blur-xl sm:-mx-6 sm:-mt-6 sm:px-6 lg:static lg:mx-0 lg:mt-0 lg:rounded-none lg:bg-transparent lg:px-0 lg:pt-0 lg:pb-5 lg:backdrop-blur-none">
+                <div className="flex items-center justify-between gap-2">
+                  {/* Mobile Back Button */}
                   <button
-                    onClick={() => setCollapsedSections((prev) => ({ ...prev, [section.key]: !prev[section.key] }))}
-                    className="flex w-full items-center justify-between gap-2 px-4 pb-2 pt-2 text-xs font-semibold uppercase tracking-[0.2em] text-abyss-300/70 transition-colors hover:text-abyss-200/90"
-                    aria-expanded={!collapsed}
+                    type="button"
+                    onClick={() => {
+                      if (editing) handleCancelEdit();
+                      setMobileView('list');
+                    }}
+                    className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-abyss-500/30 bg-abyss-800/40 px-3 py-1.5 text-xs font-medium text-pearl transition-colors hover:bg-abyss-700/50 lg:hidden"
                   >
-                    <span>{section.label}</span>
-                    <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${collapsed ? '-rotate-90' : ''}`} />
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    <span>Back</span>
                   </button>
-                  {!collapsed && (
-                    <div className="flex flex-col gap-2 pb-1">
-                      {section.tabs.map(renderTabButton)}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </nav>
 
-          <section className="glass-panel min-w-0 rounded-2xl p-4 sm:p-8">
-            <div className="flex flex-col gap-4 border-b border-abyss-700/30 pb-5 sm:gap-5 sm:pb-6">
-              <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-abyss-300/70">
-                  {activeTab.badge === 'always'
-                    ? 'Core reference'
-                    : activeTab.badge === 'opt-in' && activeTab.slug.startsWith('triad-')
-                      ? 'Triad appendix'
-                      : activeTab.badge === 'opt-in' && activeTab.slug.startsWith('npc-')
-                        ? 'NPC appendix'
-                        : activeTab.badge === 'available' && activeTab.slug.startsWith('triad-')
-                          ? 'Triad surrogate'
-                          : 'Apex plugin'}
+                  {/* Desktop Title (inline in header) */}
+                  <div className="hidden min-w-0 lg:block">
+                    <p className="mb-1 text-xs font-semibold uppercase tracking-[0.2em] text-abyss-300/70">
+                      {categoryLabel}
+                    </p>
+                    <h2 className="break-words font-display text-3xl font-semibold text-pearl">
+                      {activeTab.title}
+                      {activeTab.subtitle && (
+                        <span className="ml-3 text-lg font-normal text-muted">
+                          {activeTab.subtitle}
+                        </span>
+                      )}
+                    </h2>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+                    {!editing ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleCopy}
+                          disabled={loading || !activeContent}
+                          className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-abyss-500/30 px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-abyss-300/50 hover:text-pearl disabled:cursor-not-allowed disabled:opacity-40 sm:text-sm"
+                        >
+                          {copied ? <Check className="h-4 w-4 text-emerald-300" /> : <Clipboard className="h-4 w-4" />}
+                          <span>{copied ? 'Copied' : 'Copy'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleStartEdit}
+                          className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-abyss-400/40 bg-abyss-700/35 px-3 py-1.5 text-xs font-medium text-pearl transition-colors hover:border-abyss-300/60 hover:bg-abyss-600/45 sm:text-sm"
+                        >
+                          <Edit3 className="h-4 w-4" />
+                          <span>{user ? 'Edit' : 'Sign in'}</span>
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleCancelEdit}
+                          disabled={saving}
+                          className="inline-flex min-h-10 items-center justify-center gap-1 rounded-lg border border-abyss-500/30 px-2.5 py-1.5 text-xs font-medium text-muted transition-colors hover:text-pearl sm:px-3 sm:text-sm"
+                        >
+                          <X className="h-4 w-4" />
+                          <span className="hidden sm:inline">Cancel</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowFindReplace((v) => !v)}
+                          className={`inline-flex h-10 w-10 items-center justify-center rounded-lg border transition-colors ${
+                            showFindReplace
+                              ? 'border-foam-400/50 bg-foam-900/30 text-foam-200'
+                              : 'border-abyss-500/35 bg-abyss-800/40 text-muted hover:text-pearl'
+                          }`}
+                          aria-label="Toggle find and replace"
+                          title="Find and Replace"
+                        >
+                          <Search className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleAccept}
+                          disabled={saving || loading}
+                          className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-abyss-500 to-abyss-400 px-3.5 py-1.5 text-xs font-semibold text-pearl transition-all hover:from-abyss-400 hover:to-abyss-300 disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm"
+                        >
+                          <Check className="h-4 w-4" />
+                          <span>{saving ? 'Saving...' : 'Save'}</span>
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Compact 2-Row Find & Replace Drawer (only open when 🔍 is toggled) */}
+                {editing && showFindReplace && (
+                  <div className="mt-3 space-y-2 rounded-xl border border-abyss-600/40 bg-abyss-900/75 p-2.5">
+                    {/* Row 1: Find input + Match counter + Prev / Next jump buttons */}
+                    <div className="flex items-center gap-1.5">
+                      <div className="relative flex-1">
+                        <input
+                          type="text"
+                          value={searchText}
+                          onChange={(e) => {
+                            setSearchText(e.target.value);
+                            setCurrentMatchIdx(0);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleFindStep(e.shiftKey ? -1 : 1);
+                            }
+                          }}
+                          placeholder="Find..."
+                          className="min-h-10 w-full rounded-lg border border-abyss-600/40 bg-abyss-950/70 py-1.5 pl-3 pr-12 text-xs text-pearl outline-none placeholder:text-muted/50 focus:border-abyss-400/60 sm:text-sm"
+                        />
+                        {searchText && (
+                          <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 font-mono text-[11px] text-abyss-200/80">
+                            {matchPositions.length > 0
+                              ? `${currentMatchIdx + 1}/${matchPositions.length}`
+                              : '0/0'}
+                          </span>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleFindStep(-1)}
+                        disabled={matchPositions.length === 0}
+                        className="inline-flex h-10 w-9 shrink-0 items-center justify-center rounded-lg border border-abyss-600/40 bg-abyss-950/50 text-pearl transition-colors hover:border-abyss-400/60 hover:bg-abyss-800/60 disabled:opacity-35"
+                        aria-label="Previous match"
+                        title="Previous match"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleFindStep(1)}
+                        disabled={matchPositions.length === 0}
+                        className="inline-flex h-10 w-9 shrink-0 items-center justify-center rounded-lg border border-abyss-600/40 bg-abyss-950/50 text-pearl transition-colors hover:border-abyss-400/60 hover:bg-abyss-800/60 disabled:opacity-35"
+                        aria-label="Next match"
+                        title="Next match"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    {/* Row 2: Replace input + Replace & All side-by-side */}
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        value={replaceText}
+                        onChange={(e) => setReplaceText(e.target.value)}
+                        placeholder="Replace with..."
+                        className="min-h-10 min-w-0 flex-1 rounded-lg border border-abyss-600/40 bg-abyss-950/70 px-3 py-1.5 text-xs text-pearl outline-none placeholder:text-muted/50 focus:border-abyss-400/60 sm:text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={replaceCurrent}
+                        disabled={matchPositions.length === 0}
+                        className="min-h-10 shrink-0 rounded-lg border border-abyss-500/40 bg-abyss-800/60 px-3 py-1.5 text-xs font-medium text-pearl transition-colors hover:bg-abyss-700/70 disabled:opacity-35"
+                      >
+                        Replace
+                      </button>
+                      <button
+                        type="button"
+                        onClick={replaceAll}
+                        disabled={matchPositions.length === 0}
+                        className="min-h-10 shrink-0 rounded-lg border border-abyss-500/40 bg-abyss-800/60 px-3 py-1.5 text-xs font-medium text-pearl transition-colors hover:bg-abyss-700/70 disabled:opacity-35"
+                      >
+                        All
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Mobile Document Title (below sticky bar) */}
+              <div className="mb-4 lg:hidden">
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-abyss-300/70">
+                  {categoryLabel}
                 </p>
-                <h2 className="break-words font-display text-2xl font-semibold text-pearl sm:text-3xl">
+                <h2 className="break-words font-display text-2xl font-semibold text-pearl">
                   {activeTab.title}
                   {activeTab.subtitle && (
-                    <span className="ml-3 text-base font-normal text-muted sm:text-lg">{activeTab.subtitle}</span>
+                    <span className="ml-2 text-base font-normal text-muted">
+                      {activeTab.subtitle}
+                    </span>
                   )}
                 </h2>
               </div>
-              <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
-                <button
-                  onClick={handleCopy}
-                  disabled={loading || !activeContent}
-                  className="inline-flex min-h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-lg border border-abyss-500/30 px-3 py-2 text-sm font-medium text-muted transition-colors hover:border-abyss-300/50 hover:text-pearl disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
-                >
-                  {copied ? <Check className="h-4 w-4" /> : <Clipboard className="h-4 w-4" />}
-                  {copied ? 'Copied' : 'Copy'}
-                </button>
-                {editing ? (
+
+              {error && (
+                <p className="mb-4 rounded-lg border border-coral-600/30 bg-coral-600/10 px-4 py-3 text-sm text-coral-300">
+                  {error}
+                </p>
+              )}
+
+              {authLoading || loading ? (
+                <div className="flex min-h-[20rem] items-center justify-center text-sm text-muted">
+                  Loading your codex...
+                </div>
+              ) : !user ? (
+                <div className="flex min-h-[20rem] flex-col items-center justify-center rounded-xl border border-dashed border-abyss-600/40 bg-abyss-950/25 px-6 text-center">
+                  <LockKeyhole className="h-7 w-7 text-abyss-300/70" />
+                  <h3 className="mt-4 font-display text-xl font-medium text-pearl">
+                    Your private rules archive
+                  </h3>
+                  <p className="mt-2 max-w-md text-sm leading-relaxed text-muted">
+                    Sign in to read, edit, save, and copy your markdown rule references.
+                  </p>
                   <button
-                    onClick={handleAccept}
-                    disabled={saving || loading}
-                    className="inline-flex min-h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-lg bg-abyss-500/80 px-3 py-2 text-sm font-semibold text-pearl transition-colors hover:bg-abyss-400 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
+                    type="button"
+                    onClick={onSignIn}
+                    className="mt-6 min-h-11 rounded-lg bg-abyss-500/80 px-5 py-2.5 text-sm font-semibold text-pearl transition-colors hover:bg-abyss-400"
                   >
-                    <Check className="h-4 w-4" />
-                    {saving ? 'Saving...' : 'Accept'}
+                    Sign in to continue
                   </button>
-                ) : (
-                  <button
-                    onClick={() => user ? setEditing(true) : onSignIn()}
-                    className="inline-flex min-h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-lg border border-abyss-400/40 bg-abyss-700/30 px-3 py-2 text-sm font-medium text-pearl transition-colors hover:border-abyss-300/60 hover:bg-abyss-600/40 sm:flex-none"
-                  >
-                    <Edit3 className="h-4 w-4" />
-                    {user ? 'Edit' : 'Sign in to edit'}
-                  </button>
-                )}
+                </div>
+              ) : editing ? (
+                <textarea
+                  ref={editorRef}
+                  value={activeContent}
+                  onChange={(event) => updateActiveContent(event.target.value)}
+                  placeholder="Paste your markdown rules here..."
+                  className="min-h-[60svh] w-full resize-y rounded-xl border border-abyss-600/40 bg-abyss-950/55 p-3.5 font-mono text-sm leading-7 text-pearl outline-none placeholder:text-muted/50 focus:border-abyss-400/60 sm:min-h-[28rem] sm:p-4"
+                  spellCheck={false}
+                />
+              ) : (
+                <pre className="min-h-[20rem] whitespace-pre-wrap break-words rounded-xl border border-abyss-700/30 bg-abyss-950/35 p-3.5 font-mono text-sm leading-7 text-muted sm:min-h-[24rem] sm:p-4">
+                  {activeContent ||
+                    'No markdown has been added to this reference yet. Tap Edit to paste it in.'}
+                </pre>
+              )}
+
+              <div className="mt-5 flex items-center gap-2.5 text-xs text-muted/70 sm:text-sm">
+                <Waves className="h-4 w-4 shrink-0 text-abyss-300/60" />
+                <span>Markdown is stored as plain text in your archive.</span>
+              </div>
+            </section>
+          </div>
+        )}
+
+        {/* ==================== SUB-TAB 2: PLAYER RULES HELPER AI (Ticket 7 Shell) ==================== */}
+        {subTab === 'helper' && (
+          <section className="glass-panel mx-auto max-w-3xl rounded-2xl p-5 sm:p-8">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-abyss-700/40 text-foam-300">
+                <MessageSquare className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="font-display text-2xl font-semibold text-pearl">
+                  Ask the Rules Helper
+                </h2>
+                <p className="text-xs text-muted">
+                  Uses your active AI key • Looks up rules on demand • Remembers last 10 messages
+                </p>
               </div>
             </div>
 
-            {editing && (
-              <div className="mt-6 rounded-xl border border-abyss-600/30 bg-abyss-950/35 p-3 sm:p-4">
-                <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted">
-                  <Search className="h-3.5 w-3.5" />
-                  Find and replace
-                </div>
-                <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto_auto]">
-                  <input
-                    value={searchText}
-                    onChange={(event) => setSearchText(event.target.value)}
-                    placeholder="Find"
-                    className="min-h-11 rounded-lg border border-abyss-600/40 bg-abyss-900/60 px-3 py-2 text-sm text-pearl outline-none placeholder:text-muted/50 focus:border-abyss-400/60"
-                  />
-                  <input
-                    value={replaceText}
-                    onChange={(event) => setReplaceText(event.target.value)}
-                    placeholder="Replace with"
-                    className="min-h-11 rounded-lg border border-abyss-600/40 bg-abyss-900/60 px-3 py-2 text-sm text-pearl outline-none placeholder:text-muted/50 focus:border-abyss-400/60"
-                  />
-                  <button onClick={replaceNext} className="min-h-11 rounded-lg border border-abyss-600/40 px-3 py-2 text-sm text-muted transition-colors hover:border-abyss-300/50 hover:text-pearl">Replace</button>
-                  <button onClick={replaceAll} className="min-h-11 rounded-lg border border-abyss-600/40 px-3 py-2 text-sm text-muted transition-colors hover:border-abyss-300/50 hover:text-pearl">All</button>
-                </div>
-              </div>
-            )}
-
-            {error && <p className="mt-5 rounded-lg border border-coral-600/30 bg-coral-600/10 px-4 py-3 text-sm text-coral-300">{error}</p>}
-
-            {authLoading || loading ? (
-              <div className="flex min-h-[24rem] items-center justify-center text-sm text-muted">Loading your codex...</div>
-            ) : !user ? (
-              <div className="mt-6 flex min-h-[24rem] flex-col items-center justify-center rounded-xl border border-dashed border-abyss-600/40 bg-abyss-950/25 px-6 text-center">
-                <LockKeyhole className="h-7 w-7 text-abyss-300/70" />
-                <h3 className="mt-4 font-display text-xl font-medium text-pearl">Your private rules archive</h3>
-                <p className="mt-2 max-w-md text-sm leading-relaxed text-muted">Sign in to paste, edit, save, and copy your markdown rule references.</p>
-                <button onClick={onSignIn} className="mt-6 min-h-11 rounded-lg bg-abyss-500/80 px-5 py-2.5 text-sm font-semibold text-pearl transition-colors hover:bg-abyss-400">Sign in to continue</button>
-              </div>
-            ) : editing ? (
-              <textarea
-                ref={editorRef}
-                value={activeContent}
-                onChange={(event) => updateActiveContent(event.target.value)}
-                placeholder="Paste your markdown rules here..."
-                className="mt-5 min-h-[22rem] w-full resize-y rounded-xl border border-abyss-600/40 bg-abyss-950/50 p-4 font-mono text-sm leading-7 text-pearl outline-none placeholder:text-muted/50 focus:border-abyss-400/60 sm:mt-6 sm:min-h-[28rem]"
-                spellCheck={false}
-              />
-            ) : (
-              <pre className="mt-5 min-h-[20rem] whitespace-pre-wrap rounded-xl border border-abyss-700/30 bg-abyss-950/30 p-4 font-mono text-sm leading-7 text-muted sm:mt-6 sm:min-h-[24rem]">
-                {activeContent || 'No markdown has been added to this reference yet. Click Edit to paste it in.'}
-              </pre>
-            )}
-
-            <div className="mt-6 flex items-center gap-3 text-sm text-muted/70">
-              <Waves className="h-4 w-4 text-abyss-300/60" />
-              Markdown is stored as plain text and stays in your private archive.
+            <div className="rounded-xl border border-dashed border-abyss-600/40 bg-abyss-950/30 p-6 text-center">
+              <p className="text-sm leading-relaxed text-muted">
+                The NotebookLM-style Rules Helper AI (`RulesHelperChat.tsx`) will mount inside this
+                panel once Ticket 7 is wired up.
+              </p>
             </div>
           </section>
-        </div>
+        )}
+
+        {/* ==================== SUB-TAB 3: STORE & CARTRIDGES (Ticket 3 Shell) ==================== */}
+        {subTab === 'store' && (
+          <section className="mx-auto max-w-3xl space-y-5">
+            <div className="glass-panel rounded-2xl p-5 sm:p-8">
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-abyss-700/40 text-abyss-200">
+                  <ShoppingBag className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="font-display text-2xl font-semibold text-pearl">
+                    Store &amp; Cartridges
+                  </h2>
+                  <p className="text-xs text-muted">
+                    Install or export official game rule cartridges as mechanics are updated.
+                  </p>
+                </div>
+              </div>
+
+              {user ? (
+                <GameCartridgeControls userId={user.id} onRulesImported={handleRulesImported} />
+              ) : (
+                <div className="rounded-xl border border-dashed border-abyss-600/40 bg-abyss-950/25 p-6 text-center">
+                  <p className="text-sm text-muted">
+                    Sign in to import or manage your game rule cartridges.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={onSignIn}
+                    className="mt-4 min-h-11 rounded-xl bg-abyss-500/80 px-5 py-2.5 text-sm font-semibold text-pearl transition-colors hover:bg-abyss-400"
+                  >
+                    Sign In
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="glass-panel rounded-2xl border-dashed p-5 text-center sm:p-6">
+              <p className="text-xs leading-relaxed text-muted sm:text-sm">
+                Live cartridge version checker, one-click official installs, Pay-What-You-Want
+                support button, and Admin Store uploads will wire cleanly into this Store panel in
+                Ticket 3.
+              </p>
+            </div>
+          </section>
+        )}
+
+        {/* ==================== SUB-TAB 4: ADMIN DEV MODE (Ticket 5 Shell) ==================== */}
+        {isWhitelistedAdmin && subTab === 'dev' && (
+          <section className="glass-panel mx-auto max-w-4xl rounded-2xl border-amber-400/25 p-5 sm:p-8">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 text-amber-300">
+                <Terminal className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="font-display text-2xl font-semibold text-pearl">Dev Mode Studio</h2>
+                <p className="text-xs text-amber-200/75">
+                  Admin-only workspace — completely hidden from regular players.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-dashed border-amber-400/30 bg-abyss-950/35 p-6 text-center">
+              <p className="text-sm leading-relaxed text-muted">
+                The unrestricted side-by-side Rule Viewer, File Version Scanner, and ADHD-friendly
+                AI Developer Assistant will mount right inside this hidden tab once Ticket 5 is
+                wired up.
+              </p>
+            </div>
+          </section>
+        )}
       </div>
     </main>
   );
