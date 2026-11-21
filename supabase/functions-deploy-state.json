@@ -4,6 +4,10 @@
     "narrate": {
       "hasChanged": false,
       "hash": "ca0926def2c71b5451dd92b5a945bdad34834d80f3395fb0b77eb23f04146084"
+    },
+    "rules-helper": {
+      "hasChanged": false,
+      "hash": "5763d7cf7d7d00b80db0847475c9711fb9da501eedb1e6154b08cb505d38ab60"
     }
   }
 }

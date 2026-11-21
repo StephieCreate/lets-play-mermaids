@@ -22,6 +22,7 @@ import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import type { RuleDocument } from '@/types/database';
 import RulesStorePanel from '@/components/RulesStorePanel';
+import RulesHelperChat from '@/components/RulesHelperChat';
 import DevModeStudio from '@/components/DevModeStudio';
 import type { CartridgeRule } from '@/lib/gameCartridge';
 
@@ -791,31 +792,8 @@ export default function RulesPage({ onBack, onSignIn, embedded = false }: RulesP
           </div>
         )}
 
-        {/* ==================== SUB-TAB 2: PLAYER RULES HELPER AI (Ticket 7 Shell) ==================== */}
-        {subTab === 'helper' && (
-          <section className="glass-panel mx-auto max-w-3xl rounded-2xl p-5 sm:p-8">
-            <div className="mb-4 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-abyss-700/40 text-foam-300">
-                <MessageSquare className="h-5 w-5" />
-              </div>
-              <div>
-                <h2 className="font-display text-2xl font-semibold text-pearl">
-                  Ask the Rules Helper
-                </h2>
-                <p className="text-xs text-muted">
-                  Uses your active AI key • Looks up rules on demand • Remembers last 10 messages
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-dashed border-abyss-600/40 bg-abyss-950/30 p-6 text-center">
-              <p className="text-sm leading-relaxed text-muted">
-                The NotebookLM-style Rules Helper AI (`RulesHelperChat.tsx`) will mount inside this
-                panel once Ticket 7 is wired up.
-              </p>
-            </div>
-          </section>
-        )}
+        {/* ==================== SUB-TAB 2: PLAYER RULES HELPER AI (Ticket 7) ==================== */}
+        {subTab === 'helper' && <RulesHelperChat onSignIn={onSignIn} />}
 
         {/* ==================== SUB-TAB 3: STORE & CARTRIDGES ==================== */}
         {subTab === 'store' && (

@@ -1,3 +1,7 @@
 [functions.narrate]
 verify_jwt = true
 entrypoint = "./functions/narrate/index.ts"
+
+[functions.rules-helper]
+verify_jwt = true
+entrypoint = "./functions/rules-helper/index.ts"
