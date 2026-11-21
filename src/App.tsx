@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Key, Type, Shield, Bug, Sparkles, Check, Compass } from 'lucide-react';
+import { Key, Type, Shield, Bug, Sparkles, Check, Compass, MessageCircle } from 'lucide-react';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { FontSettingsProvider } from '@/context/FontSettingsContext';
 import OceanBackground from '@/components/OceanBackground';
@@ -394,6 +394,15 @@ function AppContent() {
                             <Bug className="h-4 w-4" />
                             <span>Report a Bug</span>
                           </button>
+                          <a
+  href="https://discord.gg/G5DbenAjJ"
+  target="_blank"
+  rel="noopener noreferrer"
+  className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-indigo-400/30 bg-indigo-500/15 px-4 py-2 text-sm font-medium text-indigo-200 transition-colors hover:border-indigo-300/50 hover:bg-indigo-500/25 hover:text-pearl"
+>
+  <MessageCircle className="h-4 w-4" />
+  <span>Join us on Discord</span>
+</a>
                         </div>
                       </div>
                     </div>
