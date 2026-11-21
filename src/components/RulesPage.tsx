@@ -22,7 +22,6 @@ import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import type { RuleDocument } from '@/types/database';
 import RulesStorePanel from '@/components/RulesStorePanel';
-import RulesStorePanel from '@/components/RulesStorePanel';
 import type { CartridgeRule } from '@/lib/gameCartridge';
 
 interface RulesPageProps {
