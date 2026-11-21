@@ -137,7 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const clearPasswordRecovery = useCallback(() => setIsPasswordRecovery(false), []);
 
-  const user = session?.user ?? null;
+  
   const passwordAgeDays = computePasswordAgeDays(user);
   const daysUntilPasswordReset = Math.max(0, PASSWORD_ROTATION_DAYS - passwordAgeDays);
   const isPasswordExpired = passwordAgeDays >= PASSWORD_ROTATION_DAYS;
