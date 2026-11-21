@@ -38,6 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const user = session?.user ?? null;
+  
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
