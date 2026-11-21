@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { PenLine, Plus, Pencil, Trash2, Loader2, LockKeyhole, AlertCircle } from 'lucide-react';
+import { PenLine, Plus, Pencil, Trash2, Loader2, LockKeyhole, AlertCircle, Download, CheckSquare, Square } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { listCustomApexes } from '@/lib/customApexes';
@@ -20,6 +20,8 @@ export default function CustomApexPanel({ onSignIn }: CustomApexPanelProps) {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [exporting, setExporting] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -66,6 +68,51 @@ export default function CustomApexPanel({ onSignIn }: CustomApexPanelProps) {
   const openEdit = (apex: UserCustomApex) => {
     setEditing(apex);
     setEditorOpen(true);
+  };
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const exportApexesToJson = (selected: UserCustomApex[]) => {
+    const payload = {
+      format: 'mermaids-custom-apexes',
+      exportedAt: new Date().toISOString(),
+      apexes: selected.map((apex) => ({
+        title: apex.title,
+        content: apex.content,
+        createdAt: apex.created_at,
+      })),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'my-custom-apexes.json';
+    link.rel = 'noopener';
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const handleExportAll = () => {
+    if (exporting || apexes.length === 0) return;
+    setExporting(true);
+    exportApexesToJson(apexes);
+    setExporting(false);
+  };
+
+  const handleExportSelected = () => {
+    if (exporting || selectedIds.size === 0) return;
+    setExporting(true);
+    exportApexesToJson(apexes.filter((a) => selectedIds.has(a.id)));
+    setExporting(false);
   };
 
   if (!user) {
@@ -139,6 +186,35 @@ export default function CustomApexPanel({ onSignIn }: CustomApexPanelProps) {
           </p>
         </div>
       ) : (
+        <>
+        <div className="glass-panel flex flex-col gap-3 rounded-2xl p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleExportAll}
+              disabled={exporting}
+              className="flex min-h-10 items-center gap-2 rounded-lg border border-abyss-600/40 bg-abyss-800/40 px-3 py-2 text-sm font-medium text-pearl transition-colors hover:bg-abyss-700/50 disabled:opacity-50"
+            >
+              {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              Export All Custom Apexes to JSON
+            </button>
+            <button
+              onClick={handleExportSelected}
+              disabled={exporting || selectedIds.size === 0}
+              className="flex min-h-10 items-center gap-2 rounded-lg border border-abyss-600/40 bg-abyss-800/40 px-3 py-2 text-sm font-medium text-pearl transition-colors hover:bg-abyss-700/50 disabled:opacity-50"
+            >
+              <Download className="h-4 w-4" />
+              Export Selected ({selectedIds.size})
+            </button>
+          </div>
+          {selectedIds.size > 0 && (
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="text-xs text-muted transition-colors hover:text-pearl"
+            >
+              Clear selection
+            </button>
+          )}
+        </div>
         <ul className="flex flex-col gap-3">
           {apexes.map((apex) => {
             const confirming = confirmingId === apex.id;
@@ -149,7 +225,20 @@ export default function CustomApexPanel({ onSignIn }: CustomApexPanelProps) {
                 className="glass-panel flex flex-col gap-4 rounded-2xl p-5 transition-colors hover:border-abyss-400/40 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="min-w-0">
-                  <p className="truncate font-display text-lg font-semibold text-pearl">{apex.title}</p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => toggleSelected(apex.id)}
+                      aria-label={selectedIds.has(apex.id) ? 'Deselect Apex' : 'Select Apex'}
+                      className="shrink-0 text-abyss-300 transition-colors hover:text-pearl"
+                    >
+                      {selectedIds.has(apex.id) ? (
+                        <CheckSquare className="h-4 w-4 text-foam-300" />
+                      ) : (
+                        <Square className="h-4 w-4" />
+                      )}
+                    </button>
+                    <p className="truncate font-display text-lg font-semibold text-pearl">{apex.title}</p>
+                  </div>
                   <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-muted">{apex.content}</p>
                 </div>
 
@@ -194,6 +283,7 @@ export default function CustomApexPanel({ onSignIn }: CustomApexPanelProps) {
             );
           })}
         </ul>
+        </>
       )}
 
       <CustomApexEditorModal

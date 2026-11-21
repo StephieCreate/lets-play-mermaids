@@ -63,11 +63,28 @@ export async function exportCartridge(): Promise<string> {
     throw new Error('Your rules could not be read for export.');
   }
 
-  const rules: CartridgeRule[] = (data ?? []).map((row) => ({
-    slug: row.slug,
-    title: row.title,
-    content: row.content,
-  }));
+  // World Lore must ride along with core/apex/triad/NPC slugs so no tab is dropped
+  const CARTRIDGE_SLUGS = [
+    'universal-core-engine',
+    'universal-game-templates',
+    'medicinal-algae-quick-reference',
+    'lets-play-mermaids-world-lore',
+    'triad-core',
+    'npc-kip-translator',
+  ];
+
+  const rules: CartridgeRule[] = (data ?? [])
+    .filter(
+      (row) =>
+        CARTRIDGE_SLUGS.includes(row.slug) ||
+        row.slug.startsWith('apex-') ||
+        row.slug.startsWith('triad-surrogate-')
+    )
+    .map((row) => ({
+      slug: row.slug,
+      title: row.title,
+      content: row.content,
+    }));
 
   const cartridge = {
     format: CARTRIDGE_FORMAT,

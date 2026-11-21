@@ -21,7 +21,8 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import type { RuleDocument } from '@/types/database';
-import GameCartridgeControls from '@/components/GameCartridgeControls';
+import RulesStorePanel from '@/components/RulesStorePanel';
+import RulesStorePanel from '@/components/RulesStorePanel';
 import type { CartridgeRule } from '@/lib/gameCartridge';
 
 interface RulesPageProps {
@@ -277,6 +278,7 @@ export default function RulesPage({ onBack, onSignIn, embedded = false }: RulesP
   };
 
   const handleStartEdit = () => {
+    if (!isAdmin) return;
     if (!user) {
       onSignIn();
       return;
@@ -586,14 +588,21 @@ export default function RulesPage({ onBack, onSignIn, embedded = false }: RulesP
                           {copied ? <Check className="h-4 w-4 text-emerald-300" /> : <Clipboard className="h-4 w-4" />}
                           <span>{copied ? 'Copied' : 'Copy'}</span>
                         </button>
-                        <button
-                          type="button"
-                          onClick={handleStartEdit}
-                          className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-abyss-400/40 bg-abyss-700/35 px-3 py-1.5 text-xs font-medium text-pearl transition-colors hover:border-abyss-300/60 hover:bg-abyss-600/45 sm:text-sm"
-                        >
-                          <Edit3 className="h-4 w-4" />
-                          <span>{user ? 'Edit' : 'Sign in'}</span>
-                        </button>
+                        {isWhitelistedAdmin ? (
+                          <button
+                            type="button"
+                            onClick={handleStartEdit}
+                            className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-abyss-400/40 bg-abyss-700/35 px-3 py-1.5 text-xs font-medium text-pearl transition-colors hover:border-abyss-300/60 hover:bg-abyss-600/45 sm:text-sm"
+                          >
+                            <Edit3 className="h-4 w-4" />
+                            <span>{user ? 'Edit' : 'Sign in'}</span>
+                          </button>
+                        ) : (
+                          <span className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-abyss-600/30 bg-abyss-800/20 px-3 py-1.5 text-xs font-medium text-muted/80">
+                            <LockKeyhole className="h-3.5 w-3.5" />
+                            <span>Read-only</span>
+                          </span>
+                        )}
                       </>
                     ) : (
                       <>
@@ -808,50 +817,9 @@ export default function RulesPage({ onBack, onSignIn, embedded = false }: RulesP
           </section>
         )}
 
-        {/* ==================== SUB-TAB 3: STORE & CARTRIDGES (Ticket 3 Shell) ==================== */}
+        {/* ==================== SUB-TAB 3: STORE & CARTRIDGES ==================== */}
         {subTab === 'store' && (
-          <section className="mx-auto max-w-3xl space-y-5">
-            <div className="glass-panel rounded-2xl p-5 sm:p-8">
-              <div className="mb-4 flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-abyss-700/40 text-abyss-200">
-                  <ShoppingBag className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="font-display text-2xl font-semibold text-pearl">
-                    Store &amp; Cartridges
-                  </h2>
-                  <p className="text-xs text-muted">
-                    Install or export official game rule cartridges as mechanics are updated.
-                  </p>
-                </div>
-              </div>
-
-              {user ? (
-                <GameCartridgeControls userId={user.id} onRulesImported={handleRulesImported} />
-              ) : (
-                <div className="rounded-xl border border-dashed border-abyss-600/40 bg-abyss-950/25 p-6 text-center">
-                  <p className="text-sm text-muted">
-                    Sign in to import or manage your game rule cartridges.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={onSignIn}
-                    className="mt-4 min-h-11 rounded-xl bg-abyss-500/80 px-5 py-2.5 text-sm font-semibold text-pearl transition-colors hover:bg-abyss-400"
-                  >
-                    Sign In
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="glass-panel rounded-2xl border-dashed p-5 text-center sm:p-6">
-              <p className="text-xs leading-relaxed text-muted sm:text-sm">
-                Live cartridge version checker, one-click official installs, Pay-What-You-Want
-                support button, and Admin Store uploads will wire cleanly into this Store panel in
-                Ticket 3.
-              </p>
-            </div>
-          </section>
+          <RulesStorePanel onRulesInstalled={handleRulesImported} onSignIn={onSignIn} />
         )}
 
         {/* ==================== SUB-TAB 4: ADMIN DEV MODE (Ticket 5 Shell) ==================== */}
