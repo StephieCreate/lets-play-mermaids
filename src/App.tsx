@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Key, Type, Shield, Bug, Sparkles, Check, Compass, MessageCircle } from 'lucide-react';
+import { Key, Type, Shield, Bug, Sparkles, Check, MessageCircle } from 'lucide-react';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { FontSettingsProvider } from '@/context/FontSettingsContext';
@@ -20,6 +20,7 @@ import UserSettingsModal from '@/components/UserSettingsModal';
 import PasswordUpdateModal from '@/components/PasswordUpdateModal';
 import Toast from '@/components/Toast';
 import NewsPanel, { type NewsPost } from '@/components/NewsPanel';
+import WorldLorePage from '@/components/WorldLorePage';
 
 type SettingsSubTab = 'ai-config' | 'display' | 'account';
 
@@ -208,29 +209,9 @@ function AppContent() {
                 <CustomApexPanel onSignIn={() => setAuthModalOpen(true)} />
               )}
 
-              {/* WORLD LORE SHELL — Ready for Ticket 4 backend & editor wiring */}
+              {/* WORLD LORE — live `public.world_lore_content` codex + admin rich-text editor */}
               {activeTab === 'world-lore' && (
-                <section className="mx-auto max-w-3xl space-y-6 py-4">
-                  <div className="text-center">
-                    <div className="mb-2 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-abyss-300">
-                      <Compass className="h-4 w-4" />
-                      <span>Atlas of the Abyss</span>
-                    </div>
-                    <h2 className="font-display text-3xl font-bold text-pearl sm:text-4xl">
-                      World Lore
-                    </h2>
-                    <p className="mt-2 text-sm text-muted">
-                      Biomes, currents, merfolk culture, and deep-water field notes.
-                    </p>
-                  </div>
-
-                  <div className="glass-panel rounded-2xl p-6 text-center sm:p-8">
-                    <p className="text-sm leading-relaxed text-muted">
-                      The interactive World Lore codex, Table of Contents sidebar, collapsible
-                      sections, and image gallery will connect here once Ticket 4 is wired up.
-                    </p>
-                  </div>
-                </section>
+                <WorldLorePage onSignIn={() => setAuthModalOpen(true)} />
               )}
 
               {/* NEWS & UPDATES — live `public.news_posts` feed + Admin Post Creator */}
