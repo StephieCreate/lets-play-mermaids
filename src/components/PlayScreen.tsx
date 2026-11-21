@@ -385,10 +385,10 @@ export default function PlayScreen({ playthroughId, onBack, onSignIn, onReportBu
   const xp = typeof rawState.xp === 'number' ? rawState.xp : 0;
   const xpTarget = Math.max(100, level * 100); // Level 1 -> 100, Level 4 -> 400
 
-  const bondLevel = typeof rawState.bond_level === 'number' ? rawState.bond_level : 0;
+  const bondLevel = typeof rawState.bond_level === 'number' ? Math.max(1, rawState.bond_level) : 1;
   const bondXp = typeof rawState.bond_xp === 'number' ? rawState.bond_xp : 0;
-  // Bond 0 -> 10 XP, Bond 1 -> 20 XP ... Bond 5 -> 60 XP
-  const bondXpTarget = Math.max(10, (bondLevel + 1) * 10);
+  // Bond 1 -> 10 XP, Bond 2 -> 20 XP ... Bond 5 -> 50 XP
+  const bondXpTarget = Math.max(10, bondLevel * 10);
 
   const stmPercent = Math.max(0, Math.min(100, (stamina / Math.max(1, maxStamina)) * 100));
   const hpPercent = Math.max(0, Math.min(100, (hp / Math.max(1, maxHp)) * 100));
@@ -434,7 +434,7 @@ export default function PlayScreen({ playthroughId, onBack, onSignIn, onReportBu
   const adjustBondXp = (delta: number) => {
     let nextBondXp = bondXp + delta;
     let nextBondLvl = bondLevel;
-    const currentTarget = Math.max(10, (nextBondLvl + 1) * 10);
+    const currentTarget = Math.max(10, (nextBondLvl * 10);
 
     if (nextBondXp >= currentTarget && nextBondLvl < 20) {
       nextBondXp -= currentTarget;
