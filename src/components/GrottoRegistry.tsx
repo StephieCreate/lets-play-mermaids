@@ -129,7 +129,6 @@ export default function GrottoRegistry({ playthroughId, onSignIn }: GrottoRegist
     setSaving(false);
   };
 
-  return (
     return (
     <div className="space-y-4">
       {/* Hard Mode Consent — standalone card above Grotto Registry */}
