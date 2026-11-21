@@ -56,6 +56,12 @@ const coreRules: RuleTab[] = [
     available: true,
     badge: 'always',
   },
+  {
+    slug: 'lets-play-mermaids-world-lore',
+    title: "Let's Play Mermaids World Lore Engine",
+    available: true,
+    badge: 'always',
+  },
 ];
 
 const apexPlugins: RuleTab[] = [
