@@ -31,7 +31,11 @@ export function buildSystemPrompt(
   const coreRulesText = CORE_RULE_SLUGS
     .map((slug) => {
       const content = ruleContents[slug];
-      return content ? `### ${slug}\n${content}` : null;
+      if (!content) return null;
+      if (slug === "lets-play-mermaids-world-lore") {
+        return `### ${slug}\n[STATIC BASELINE LORE NOTE: The following is baseline common-knowledge ocean lore that merfolk naturally know in-world. It provides cultural and environmental context and does NOT override mechanical game rules.]\n${content}`;
+      }
+      return `### ${slug}\n${content}`;
     })
     .filter(Boolean)
     .join("\n\n");

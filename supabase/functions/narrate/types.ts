@@ -55,6 +55,7 @@ export const CORE_RULE_SLUGS = [
   "universal-core-engine",
   "universal-game-templates",
   "medicinal-algae-quick-reference",
+  "lets-play-mermaids-world-lore",
 ];
 
 export function apexRuleSlug(apexTarget: string): string {

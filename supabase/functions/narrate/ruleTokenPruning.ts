@@ -130,6 +130,16 @@ export function pruneRulesByPlayerState(
 ): string {
   if (!ruleText || !ruleText.trim()) return ruleText;
 
+  // --------------------------------------------------------------------------
+  // DOCUMENT 0: "lets-play-mermaids-world-lore" (Zone 1 — 100% STATIC)
+  // Baseline common-knowledge ocean lore every merfolk naturally knows. It must
+  // NEVER mutate between turns, so it is passed through completely unpruned and
+  // NEVER enters the Zone 2 activated tail (see getDynamicTurnRules).
+  // --------------------------------------------------------------------------
+  if (ruleSlug === "lets-play-mermaids-world-lore") {
+    return ruleText;
+  }
+
   // Use ONLY day-frozen state so DeepSeek caches the entire system prompt + chat history
   const frozen = buildDayFrozenState(ctx);
 
@@ -407,6 +417,9 @@ export function getDynamicTurnRules(
   // --------------------------------------------------------------------------
   for (const [slug, rawText] of Object.entries(rawRulesBySlug)) {
     if (!rawText) continue;
+
+    // Static core lore is fully frozen in Zone 1 — never activated dynamically.
+    if (slug === "lets-play-mermaids-world-lore") continue;
 
     if (slug.startsWith("apex-") || /\[APEX PLUGIN:/i.test(rawText)) {
       const triggeredNpcs = extractTriggeredOffscreenApexNpcsZone2(rawText, frozen, {
