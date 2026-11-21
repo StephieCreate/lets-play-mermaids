@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type MouseEvent as ReactMouseEvent,
 } from 'react';
 import {
   AlertCircle,
@@ -310,7 +311,7 @@ export default function WorldLorePage({ onSignIn }: { onSignIn: () => void }) {
 
   // Handle image clicks in edit mode (select + resize) and view mode (lightbox)
   const handleBodyClick = useCallback(
-    (event: MouseEvent) => {
+    (event: ReactMouseEvent<HTMLDivElement>) => {
       const target = event.target as HTMLElement;
       if (target.tagName !== 'IMG') {
         if (selectedImage) {

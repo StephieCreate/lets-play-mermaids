@@ -237,6 +237,7 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
         const { data: sessionData } = await supabase.auth.getSession();
         const token = sessionData.session?.access_token;
         if (!token) throw new Error('Your session expired. Sign in again and try again.');
+        if (!user) throw new Error('Your session expired. Sign in again and try again.');
 
         let aiModel: string | undefined;
         const { data: activeKeyRow } = await supabase

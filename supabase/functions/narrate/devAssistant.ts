@@ -167,7 +167,8 @@ export async function handleDevAssistant(req: Request, body: DevAssistantRequest
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !SUPABASE_ANON_KEY) {
       return json({ error: "Server is not configured. Please try again later." }, 500);
     }
 
@@ -178,7 +179,9 @@ export async function handleDevAssistant(req: Request, body: DevAssistantRequest
       return json({ error: "Admin access required." }, 403);
     }
 
-    const userClient = createClient(SUPABASE_URL, userToken);
+    const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: `Bearer ${userToken}` } },
+    });
     const { data: userData, error: userErr } = await userClient.auth.getUser(userToken);
     if (userErr || !userData?.user) {
       return json({ error: "Admin access required." }, 403);

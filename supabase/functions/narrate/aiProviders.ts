@@ -82,7 +82,15 @@ export async function callAI(
       },
       body: JSON.stringify({
         model: model,
-        system: systemPrompt,
+        // Static system prefix wrapped as a cacheable block so Anthropic's
+        // prompt cache discounts the entire frozen rule prefix every turn.
+        system: [
+          {
+            type: "text",
+            text: systemPrompt,
+            cache_control: { type: "ephemeral" },
+          },
+        ],
         messages: conversationMessages,
         max_tokens: 16000,
         temperature: 0.8,
@@ -113,12 +121,13 @@ export async function callAI(
   }
 
   // 2. Constructing the Envelope Sandwich
-  // Temporarily pop the newest player input off the end of the array
-  const latestPlayerMessage = conversationMessages.pop();
+  // Copy the array (non-mutating) and pull the newest player input off the end
+  const historyCopy = [...conversationMessages];
+  const latestPlayerMessage = historyCopy.pop();
 
   const messages = [
     { role: "system", content: finalSystemPrompt }, // TOP: The God-Mode Rules
-    ...conversationMessages,                        // MIDDLE: Day-Isolated Chat History
+    ...historyCopy,                                 // MIDDLE: Day-Isolated Chat History
     { role: "system", content: ANTI_DRIFT_REMINDER }, // BOTTOM: The Anti-Drift Reminder
   ];
 

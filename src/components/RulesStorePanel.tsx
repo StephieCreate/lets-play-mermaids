@@ -415,7 +415,7 @@ export default function RulesStorePanel({ onRulesInstalled, onSignIn }: RulesSto
               <p className="mb-2 text-sm font-medium text-pearl">Local Cartridge Import</p>
               <GameCartridgeControls
                 userId={user.id}
-                onRulesInstalled={onRulesInstalled}
+                onRulesImported={onRulesInstalled}
               />
             </div>
 

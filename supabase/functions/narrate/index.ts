@@ -9,7 +9,8 @@ import {
   SEASON_KEYWORDS,
   apexRuleSlug,
   triadSurrogateSlug,
-} from "./types.ts";import type { NarrateRequest, NarrativeSummaryRow } from "./types.ts";
+} from "./types.ts";
+import type { NarrateRequest, NarrativeSummaryRow } from "./types.ts";
 import {
   applyCommandInterceptors,
   buildTimePassageDirective,
@@ -18,6 +19,7 @@ import {
 } from "./gameMechanics.ts";
 import {
   buildConversationMessages,
+  buildDynamicUserTail,
   buildSystemPrompt,
   buildUserPrompt,
   extractQueuedSection,
@@ -376,16 +378,22 @@ Deno.serve(async (req: Request) => {
       ruleContents,
       dailySaveLog,
       { kipActive, triadActive, triadTarget },
-      summariesToInclude,
-      { currentSeason, currentYear },
       grottoRegistry,
       grottoMap,
       plotWishlistQueued,
       activeExtras,
-      narrativeSummaryRules,
-      { hardModeActive, gentleDay: Boolean(body.gentleDay) },
+      { hardModeActive },
     );
-    const userPrompt = `${buildUserPrompt(effectiveReq)}${dynamicTurnTail}`;
+    // Per-turn (cache-breaking) context — turn mode, Gentle Day, keyword-selected
+    // summaries, live stats — goes ONLY into the outgoing user message tail.
+    const perTurnTail = buildDynamicUserTail(
+      effectiveReq,
+      summariesToInclude,
+      narrativeSummaryRules,
+      { currentSeason, currentYear },
+      Boolean(body.gentleDay),
+    );
+    const userPrompt = `${buildUserPrompt(effectiveReq)}${dynamicTurnTail}${perTurnTail}`;
     const conversationMessages = buildConversationMessages(
       body.conversationHistory ?? [],
       userPrompt,

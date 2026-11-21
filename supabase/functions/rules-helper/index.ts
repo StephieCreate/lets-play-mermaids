@@ -368,7 +368,8 @@ Deno.serve(async (req: Request) => {
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !SUPABASE_ANON_KEY) {
       return json({ error: "Server is not configured. Please try again later." }, 500);
     }
 
@@ -376,13 +377,15 @@ Deno.serve(async (req: Request) => {
     const authHeader = req.headers.get("Authorization") ?? "";
     const userToken = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length).trim() : "";
     if (!userToken) {
-      return json({ error: "Please sign in to use the Rules Helper." }, 401);
+      return json({ error: "Could not verify your session — please sign in again." }, 401);
     }
 
-    const userClient = createClient(SUPABASE_URL, userToken);
+    const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: `Bearer ${userToken}` } },
+    });
     const { data: userData, error: userErr } = await userClient.auth.getUser(userToken);
     if (userErr || !userData?.user) {
-      return json({ error: "Please sign in to use the Rules Helper." }, 401);
+      return json({ error: "Could not verify your session — please sign in again." }, 401);
     }
     const userId = userData.user.id;
 

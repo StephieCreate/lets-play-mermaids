@@ -19,14 +19,11 @@ export function buildSystemPrompt(
   ruleContents: Record<string, string>,
   dailySaveLog: string,
   config: { kipActive: boolean; triadActive: boolean; triadTarget: string },
-  summaries: NarrativeSummaryRow[],
-  current: { currentSeason: string | null; currentYear: number | null },
   grottoRegistry: string,
   grottoMap: string,
   plotWishlistQueued: string,
   extras: { title: string; content: string; category: string }[],
-  summaryRules: string,
-  difficulty: { hardModeActive: boolean; gentleDay: boolean },
+  difficulty: { hardModeActive: boolean },
 ): string {
   const coreRulesText = CORE_RULE_SLUGS
     .map((slug) => {
@@ -84,23 +81,9 @@ export function buildSystemPrompt(
   // Build narrative summaries section.
   // Current season is always included. Referenced older seasons are included
   // because the player's input or current scene mentioned them.
-  const summariesWithContent = summaries.filter((s) => s.content.trim().length > 0);
-  const narrativeSummariesSection = [
-    summaryRules.trim()
-      ? `## Narrative Summaries Rules\nFollow these rules when reading and applying the narrative summaries below:\n${summaryRules}`
-      : "",
-    summariesWithContent.length > 0
-      ? `## Narrative Summaries\nThe following seasonal summaries provide story context. ${
-          current.currentSeason && current.currentYear
-            ? `The current season is ${SEASON_LABELS[current.currentSeason] ?? current.currentSeason}, Year ${current.currentYear}.`
-            : ""
-        } Always include the current season's summary. Older seasons are provided because the current scene references them.\n\n${
-          summariesWithContent
-            .map((s) => `### ${SEASON_LABELS[s.season] ?? s.season}, Year ${s.year}\n${extractRecentDaysTopDown(s.content, req.playerInput, 7)}`)
-            .join("\n\n")
-      }`
-      : "",
-  ].filter((s) => s.trim().length > 0).join("\n\n");
+  // MOVED: This section is now built per-turn in buildDynamicUserTail() below
+  // and injected into the Zone 2 user-message tail, because extractRecentDaysTopDown()
+  // re-slices summary text based on the player's live input every turn.
 
   const extrasWithContent = extras.filter((e) => e.content.trim().length > 0);
   const extrasSection = extrasWithContent.length > 0
@@ -111,17 +94,14 @@ export function buildSystemPrompt(
       }`
     : "";
 
-  const difficultySection = [
-    difficulty.hardModeActive
-      ? `## Player Consent Waiver (Difficulty & Tone Override)
+  // MOVED: only the day-frozen Hard Mode consent waiver stays in the static
+  // systemPrompt. The per-turn Gentle Day directive now lives in the Zone 2
+  // user-message tail (buildDynamicUserTail) so it never breaks the prefix.
+  const difficultySection = difficulty.hardModeActive
+    ? `## Player Consent Waiver (Difficulty & Tone Override)
 The player has ACTIVATED Hard Mode. Apply the following consent waiver in full:
 ${HARD_MODE_CONSENT_TEXT}`
-      : "",
-    difficulty.gentleDay
-      ? `## Gentle Day (This Turn Only)
-The player has requested a GENTLE DAY for this turn only. Temporarily soften the environmental tension and scale back immediate danger. Be kinder, offer a lucky break, and let this moment breathe without punishment. This is a one-turn reprieve — resume normal difficulty next turn unless the player requests otherwise.`
-      : "",
-  ].filter((s) => s.trim().length > 0).join("\n\n");
+    : "";
 
   const characterSection = [
     "## Character",
@@ -137,31 +117,16 @@ The player has requested a GENTLE DAY for this turn only. Temporarily soften the
     `- Triad Option: ${config.triadActive ? `Active — ${config.triadTarget || "no surrogate selected"}` : "Inactive"}`,
   ].join("\n");
 
-  const curStm = (req.storyState["stamina"] as number) ?? 10;
-  const maxStm = (req.storyState["max_stamina"] as number) ?? 10;
-  const curHp = (req.storyState["hp"] as number) ?? 10;
-  const maxHp = (req.storyState["max_hp"] as number) ?? 10;
-  const curLvl = (req.storyState["level"] as number) ?? 1;
-  const curXp = (req.storyState["xp"] as number) ?? 0;
-  const curBond = Math.max(1, (req.storyState["bond_level"] as number) ?? 1);
-  const curBondXp = (req.storyState["bond_xp"] as number) ?? 0;
-
-  const storyStateSection = [
-    "## Current Story State (Authoritative Tracker Math — Enforce These Exact Totals)",
-    `- Scene: ${req.currentScene || "Beginning"}`,
-    `- Stamina: ${curStm}/${maxStm}`,
-    `- Health (HP): ${curHp}/${maxHp}`,
-    `- Global Level: ${curLvl} (XP: ${curXp}/${curLvl * 100})`,
-    `- Bond Level: ${curBond} (Bond XP: ${curBondXp}/${Math.max(1, curBond) * 10})`,
-    `- Raw State: ${JSON.stringify(req.storyState)}`,
-  ].join("\n");
+  // MOVED: live per-turn stats (Scene, Stamina, HP, Level/XP, Bond, Raw State)
+  // are now emitted in buildDynamicUserTail() below — they mutate every turn and
+  // must never sit inside the byte-identical cached prefix.
 
   // ---- COGNITIVE SCAFFOLDING & XML FENCING ----
-  const isWaiting = req.storyState["game_mode"] === "WAITING COMMAND";
+  // MOVED: the WAITING COMMAND vs ACTIVE mode switch is now issued per-turn in
+  // the <turn_mode> block of the Zone 2 user-message tail (buildDynamicUserTail).
+  // The top-of-prompt directive below is 100% STATIC so the cache prefix never shifts.
 
-  const identityRole = isWaiting
-    ? `<system_directive>\n⛔ SYSTEM OVERRIDE: MAINTENANCE MODE ACTIVE (WAITING COMMAND).\nYou are an expert scholar and rules interpreter. You are strictly FORBIDDEN from writing story narrative, generating scenes, or advancing the plot.\n\nCRITICAL CONTEXT FIX: The <daily_save_log> below may state it is "Morning". This means the morning is WAITING BEHIND THE GATE. The day has NOT begun. DO NOT let your prose reflex override this. Output ONLY the calculated weather and the Maintenance Window prompt, then STOP.\n</system_directive>`
-    : `<system_directive>\nSYSTEM ENGINE ACTIVE: You are the Game Master. You operate as a unified engine composed of three entities:\n1. The Rules Arbiter: Scans input and strictly enforces mechanics.\n2. The Atmospheric Director: Dictates sensory details and environmental tone.\n3. The Prose Writer: Takes instructions from the Arbiter and Director to write a breathtaking, brutal survival narrative.\n\nYou are in ACTIVE MODE. Proceed with storytelling.\n</system_directive>`;
+  const systemDirective = `<system_directive>\nSYSTEM ENGINE: You are the Game Master. You operate as a unified engine composed of three entities:\n1. The Rules Arbiter: Scans input and strictly enforces mechanics.\n2. The Atmospheric Director: Dictates sensory details and environmental tone.\n3. The Prose Writer: Takes instructions from the Arbiter and Director to write a breathtaking, brutal survival narrative.\n\nThe current turn mode (ACTIVE MODE vs MAINTENANCE MODE / WAITING COMMAND) is issued at the END of the player's message in a <turn_mode> block each turn. The <turn_mode> block is the authoritative override for this turn's behavior and always wins over any assumptions from the state files above.\n</system_directive>`;
 
   const outputStructureProtocol = `<output_formatting>
 ===============================================================
@@ -216,7 +181,7 @@ RESPONSE BUDGET (EVERY PROVIDER):
 </output_formatting>`;
 
   return [
-    identityRole,
+    systemDirective,
     outputStructureProtocol,
     NARRATIVE_STYLE_TRAINING,
     `<dual_mode_protocol>\n${DUAL_MODE_PROTOCOL}\n</dual_mode_protocol>`,
@@ -224,16 +189,90 @@ RESPONSE BUDGET (EVERY PROVIDER):
     difficultySection ? `<difficulty_modifiers>\n${difficultySection}\n</difficulty_modifiers>` : "",
     `<character_sheet>\n${characterSection}\n</character_sheet>`,
     `<configuration>\n${configSection}\n</configuration>`,
-    narrativeSummariesSection ? `<narrative_summaries>\n${narrativeSummariesSection}\n</narrative_summaries>` : "",
     dailySaveLogSection ? `<daily_save_log>\n${dailySaveLogSection}\n</daily_save_log>` : "",
     grottoRegistrySection ? `<grotto_registry>\n${grottoRegistrySection}\n</grotto_registry>` : "",
     plotWishlistSection ? `<plot_wishlist>\n${plotWishlistSection}\n</plot_wishlist>` : "",
     extrasSection ? `<player_extras>\n${extrasSection}\n</player_extras>` : "",
-    `<current_story_state>\n${storyStateSection}\n</current_story_state>`,
     ADVANCED_PROSE_DIRECTIVE,
   ]
     .filter((s) => s.trim().length > 0)
     .join("\n\n");
+}
+
+/**
+ * ZONE 2 PER-TURN TAIL: everything in this block mutates every turn (turn mode,
+ * Gentle Day, keyword-selected narrative summaries, live stats) so it is appended
+ * ONLY to the outgoing user message — never to the systemPrompt, and never saved
+ * into DB chat history — keeping the cached prefix byte-identical within a day.
+ */
+export function buildDynamicUserTail(
+  req: NarrateRequest,
+  summaries: NarrativeSummaryRow[],
+  summaryRules: string,
+  current: { currentSeason: string | null; currentYear: number | null },
+  gentleDay: boolean,
+): string {
+  // 1. Per-turn mode switch (WAITING COMMAND vs ACTIVE)
+  const isWaiting = req.storyState["game_mode"] === "WAITING COMMAND";
+
+  const turnMode = isWaiting
+    ? `<turn_mode>\n⛔ SYSTEM OVERRIDE: MAINTENANCE MODE ACTIVE (WAITING COMMAND).\nYou are an expert scholar and rules interpreter. You are strictly FORBIDDEN from writing story narrative, generating scenes, or advancing the plot.\n\nCRITICAL CONTEXT FIX: The <daily_save_log> in your system prompt may state it is "Morning". This means the morning is WAITING BEHIND THE GATE. The day has NOT begun. DO NOT let your prose reflex override this. Output ONLY the calculated weather and the Maintenance Window prompt, then STOP.\n</turn_mode>`
+    : `<turn_mode>\nSYSTEM ENGINE ACTIVE: You are in ACTIVE MODE. Proceed with storytelling.\n</turn_mode>`;
+
+  // 2. Per-turn Gentle Day directive
+  const gentleDaySection = gentleDay
+    ? `## Gentle Day (This Turn Only)\nThe player has requested a GENTLE DAY for this turn only. Temporarily soften the environmental tension and scale back immediate danger. Be kinder, offer a lucky break, and let this moment breathe without punishment. This is a one-turn reprieve — resume normal difficulty next turn unless the player requests otherwise.`
+    : "";
+
+  // 3. Keyword-selected narrative summaries (re-sliced by live player input every turn)
+  const summariesWithContent = summaries.filter((s) => s.content.trim().length > 0);
+  const narrativeSummariesSection = [
+    summaryRules.trim()
+      ? `## Narrative Summaries Rules\nFollow these rules when reading and applying the narrative summaries below:\n${summaryRules}`
+      : "",
+    summariesWithContent.length > 0
+      ? `## Narrative Summaries\nThe following seasonal summaries provide story context. ${
+          current.currentSeason && current.currentYear
+            ? `The current season is ${SEASON_LABELS[current.currentSeason] ?? current.currentSeason}, Year ${current.currentYear}.`
+            : ""
+        } Always include the current season's summary. Older seasons are provided because the current scene references them.\n\n${
+          summariesWithContent
+            .map((s) => `### ${SEASON_LABELS[s.season] ?? s.season}, Year ${s.year}\n${extractRecentDaysTopDown(s.content, req.playerInput, 7)}`)
+            .join("\n\n")
+      }`
+      : "",
+  ].filter((s) => s.trim().length > 0).join("\n\n");
+
+  // 4. Live story state (mutated every turn by post-processing)
+  const curStm = (req.storyState["stamina"] as number) ?? 10;
+  const maxStm = (req.storyState["max_stamina"] as number) ?? 10;
+  const curHp = (req.storyState["hp"] as number) ?? 10;
+  const maxHp = (req.storyState["max_hp"] as number) ?? 10;
+  const curLvl = (req.storyState["level"] as number) ?? 1;
+  const curXp = (req.storyState["xp"] as number) ?? 0;
+  const curBond = Math.max(1, (req.storyState["bond_level"] as number) ?? 1);
+  const curBondXp = (req.storyState["bond_xp"] as number) ?? 0;
+
+  const storyStateSection = [
+    "## Current Story State (Authoritative Tracker Math — Enforce These Exact Totals)",
+    `- Scene: ${req.currentScene || "Beginning"}`,
+    `- Stamina: ${curStm}/${maxStm}`,
+    `- Health (HP): ${curHp}/${maxHp}`,
+    `- Global Level: ${curLvl} (XP: ${curXp}/${curLvl * 100})`,
+    `- Bond Level: ${curBond} (Bond XP: ${curBondXp}/${Math.max(1, curBond) * 10})`,
+    `- Raw State: ${JSON.stringify(req.storyState)}`,
+  ].join("\n");
+
+  const tailBlocks = [
+    gentleDaySection ? `<difficulty_modifiers>\n${gentleDaySection}\n</difficulty_modifiers>` : "",
+    narrativeSummariesSection ? `<narrative_summaries>\n${narrativeSummariesSection}\n</narrative_summaries>` : "",
+    `<current_story_state>\n${storyStateSection}\n</current_story_state>`,
+    turnMode,
+  ]
+    .filter((s) => s.trim().length > 0)
+    .join("\n\n");
+
+  return tailBlocks ? `\n\n${tailBlocks}` : "";
 }
 
 export function buildUserPrompt(req: NarrateRequest): string {

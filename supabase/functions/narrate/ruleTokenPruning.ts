@@ -18,7 +18,7 @@
  */
 
 // Blueprint for a single message in the chat history
-export interface PruningTurnMessage {
+interface PruningTurnMessage {
   role: "player" | "narrator";
   content: string;
 }
@@ -66,7 +66,7 @@ function buildDayFrozenState(ctx: PruningContext): DayFrozenState {
   const state = ctx.storyState ?? {};
 
   const globalLevel = getNumberStat(state["level"], saveLog, /\*\*Global Level:\*\*\s*(\d+)/i, 1);
-  const bondLevel = getNumberStat(state["bond_level"], saveLog, /\*\*Bond Level:\*\*\s*(\d+)/i, 0);
+  const bondLevel = getNumberStat(state["bond_level"], saveLog, /\*\*Bond Level:\*\*\s*(\d+)/i, 1);
   const legacyMarks = getNumberStat(undefined, saveLog, /\*\*Legacy Marks:\*\*[^|\n]*\|\s*(\d+)\s*Marks/i, 0);
 
   const season = detectSeason(state["current_season"] as string, saveLog);
@@ -284,7 +284,7 @@ export function pruneRulesByPlayerState(
       "[SYSTEM_RULE]: THE SOLO SURVIVAL WEEK (The Organic Arrival)",
     );
   }
-  if (frozen.bondLevel === 0 && frozen.dayNumber < 7 && frozen.hasStartedGame) {
+  if (frozen.bondLevel <= 1 && frozen.dayNumber < 7 && frozen.hasStartedGame) {
     pruned = stripMarkdownSection(
       pruned,
       "[SYSTEM_RULE]: THE APEX-PRESENT PROTECTION",
