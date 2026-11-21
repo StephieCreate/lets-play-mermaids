@@ -23,6 +23,7 @@ import {
   extractQueuedSection,
 } from "./promptBuilder.ts";
 import { callAI, extractNarration } from "./aiProviders.ts";
+import { handleDevAssistant, isDevAssistantRequest } from "./devAssistant.ts";
 import {
   SCENE_ANALYSIS_PATTERN,
   applyStatUpdatesFromNarration,
@@ -53,6 +54,15 @@ Deno.serve(async (req: Request) => {
     }
 
     const body: NarrateRequest = await req.json();
+
+    // ---- DEV MODE SHORT-CIRCUIT ----
+    // Admin-only AI Dev Assistant. Runs BEFORE any playthrough lookup, RPG
+    // system prompt, command interceptors, rule token pruning, or
+    // enforceAquaticAnatomy post-processing, so gameplay is untouched and no
+    // RPG guardrails ever apply to Dev Mode.
+    if (isDevAssistantRequest(body)) {
+      return await handleDevAssistant(req, body);
+    }
 
     if (!body.playthroughId || !body.characterName || !body.playerInput) {
       return new Response(

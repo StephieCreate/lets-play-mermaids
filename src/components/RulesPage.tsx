@@ -22,6 +22,7 @@ import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import type { RuleDocument } from '@/types/database';
 import RulesStorePanel from '@/components/RulesStorePanel';
+import DevModeStudio from '@/components/DevModeStudio';
 import type { CartridgeRule } from '@/lib/gameCartridge';
 
 interface RulesPageProps {
@@ -822,29 +823,7 @@ export default function RulesPage({ onBack, onSignIn, embedded = false }: RulesP
         )}
 
         {/* ==================== SUB-TAB 4: ADMIN DEV MODE (Ticket 5 Shell) ==================== */}
-        {isWhitelistedAdmin && subTab === 'dev' && (
-          <section className="glass-panel mx-auto max-w-4xl rounded-2xl border-amber-400/25 p-5 sm:p-8">
-            <div className="mb-4 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 text-amber-300">
-                <Terminal className="h-5 w-5" />
-              </div>
-              <div>
-                <h2 className="font-display text-2xl font-semibold text-pearl">Dev Mode Studio</h2>
-                <p className="text-xs text-amber-200/75">
-                  Admin-only workspace — completely hidden from regular players.
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-dashed border-amber-400/30 bg-abyss-950/35 p-6 text-center">
-              <p className="text-sm leading-relaxed text-muted">
-                The unrestricted side-by-side Rule Viewer, File Version Scanner, and ADHD-friendly
-                AI Developer Assistant will mount right inside this hidden tab once Ticket 5 is
-                wired up.
-              </p>
-            </div>
-          </section>
-        )}
+        {isWhitelistedAdmin && subTab === 'dev' && <DevModeStudio />}
       </div>
     </main>
   );
