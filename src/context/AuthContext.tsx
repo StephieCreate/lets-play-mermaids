@@ -123,7 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const resetPasswordForEmail = useCallback(async (email: string) => {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin,
+      redirectTo: 'https://letsplaymermaids.com',
     });
     return { error: error?.message ?? null };
   }, []);
