@@ -375,7 +375,7 @@ export default function RulesPage({ onBack, onSignIn, embedded = false }: RulesP
         }`}
       >
         <span className="min-w-0">
-          <span className="block truncate">{tab.title}</span>
+          <span className="leading-snug">{tab.title}</span>
           {tab.subtitle && (
             <span className="mt-0.5 block truncate text-xs text-current/70">{tab.subtitle}</span>
           )}
@@ -437,40 +437,40 @@ export default function RulesPage({ onBack, onSignIn, embedded = false }: RulesP
           <button
             type="button"
             onClick={() => setSubTab('codex')}
-            className={`flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-xs font-medium transition-all sm:gap-2 sm:px-3 sm:text-sm ${
+            className={`flex min-h-12 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[11px] font-medium leading-none transition-all sm:min-h-10 sm:flex-row sm:gap-2 sm:px-3 sm:text-sm ${
               subTab === 'codex'
                 ? 'bg-abyss-500/35 text-pearl shadow-sm'
                 : 'text-muted hover:bg-abyss-800/40 hover:text-pearl'
             }`}
           >
             <BookOpen className="h-4 w-4 shrink-0" />
-            <span>Codex</span>
+            <span className="whitespace-nowrap">Codex</span>
           </button>
 
           <button
             type="button"
             onClick={() => setSubTab('helper')}
-            className={`flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-xs font-medium transition-all sm:gap-2 sm:px-3 sm:text-sm ${
+            className={`flex min-h-12 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[11px] font-medium leading-none transition-all sm:min-h-10 sm:flex-row sm:gap-2 sm:px-3 sm:text-sm ${
               subTab === 'helper'
                 ? 'bg-abyss-500/35 text-pearl shadow-sm'
                 : 'text-muted hover:bg-abyss-800/40 hover:text-pearl'
             }`}
           >
             <MessageSquare className="h-4 w-4 shrink-0" />
-            <span>Helper AI</span>
+            <span className="whitespace-nowrap">Helper AI</span>
           </button>
 
           <button
             type="button"
             onClick={() => setSubTab('store')}
-            className={`flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-xs font-medium transition-all sm:gap-2 sm:px-3 sm:text-sm ${
+            className={`flex min-h-12 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[11px] font-medium leading-none transition-all sm:min-h-10 sm:flex-row sm:gap-2 sm:px-3 sm:text-sm ${
               subTab === 'store'
                 ? 'bg-abyss-500/35 text-pearl shadow-sm'
                 : 'text-muted hover:bg-abyss-800/40 hover:text-pearl'
             }`}
           >
             <ShoppingBag className="h-4 w-4 shrink-0" />
-            <span>Store</span>
+            <span className="whitespace-nowrap">Store</span>
           </button>
 
           {/* HIDDEN ADMIN-ONLY DEV MODE TAB — never rendered in DOM for non-admins */}
@@ -478,24 +478,24 @@ export default function RulesPage({ onBack, onSignIn, embedded = false }: RulesP
             <button
               type="button"
               onClick={() => setSubTab('dev')}
-              className={`flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-xs font-medium transition-all sm:gap-2 sm:px-3 sm:text-sm ${
+              className={`flex min-h-12 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[11px] font-medium leading-none transition-all sm:min-h-10 sm:flex-row sm:gap-2 sm:px-3 sm:text-sm ${
                 subTab === 'dev'
                   ? 'border border-amber-400/40 bg-amber-500/20 text-amber-200 shadow-sm'
                   : 'text-amber-300/75 hover:bg-amber-500/10 hover:text-amber-200'
               }`}
             >
               <Terminal className="h-4 w-4 shrink-0" />
-              <span>Dev Mode</span>
+              <span className="whitespace-nowrap">Dev Mode</span>
             </button>
           )}
         </div>
 
         {/* ==================== SUB-TAB 1: CODEX ==================== */}
         {subTab === 'codex' && (
-          <div className="grid gap-4 lg:grid-cols-[17.5rem_minmax(0,1fr)] lg:items-start lg:gap-6">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[17.5rem_minmax(0,1fr)] lg:items-start lg:gap-6">
             {/* STEP A (Mobile Directory) / Left Column (Desktop) */}
             <nav
-              className={`glass-panel rounded-2xl p-2 ${mobileView === 'doc' ? 'hidden lg:block' : 'block'}`}
+              className={`glass-panel min-w-0 rounded-2xl p-2 ${mobileView === 'doc' ? 'hidden lg:block' : 'block'}`}
               aria-label="Rule tabs"
             >
               {(
