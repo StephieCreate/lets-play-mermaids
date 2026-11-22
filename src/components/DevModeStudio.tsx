@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
   ClipboardList,
+  Copy,
   Eraser,
   Files,
   Loader2,
@@ -61,6 +62,7 @@ export default function DevModeStudio() {
   const [chatInput, setChatInput] = useState('');
   const [chatSending, setChatSending] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [activeModelLabel, setActiveModelLabel] = useState<string>('');
 
   const feedRef = useRef<HTMLDivElement>(null);
@@ -292,6 +294,12 @@ export default function DevModeStudio() {
     setChatInput('');
   };
 
+  const copyMessage = (content: string, idx: number) => {
+    void navigator.clipboard.writeText(content);
+    setCopiedIndex(idx);
+    window.setTimeout(() => setCopiedIndex(null), 1800);
+  };
+
   const sendVersionAudit = () => {
     const modified = scanRows.filter((r) => r.status !== 'unchanged');
     const auditPrompt = [
@@ -518,7 +526,7 @@ export default function DevModeStudio() {
             </button>
           </div>
 
-          <div ref={feedRef} className="max-h-[55vh] min-h-[16rem] space-y-3 overflow-y-auto pr-1">
+          <div ref={feedRef} className="max-h-[62vh] min-h-[20rem] min-w-0 space-y-3 overflow-y-auto pr-1">
             {chatMessages.length === 0 && !chatSending && (
               <div className="rounded-xl border border-dashed border-abyss-600/40 bg-abyss-950/30 p-5 text-center">
                 <p className="mb-3 text-sm text-muted">
@@ -543,38 +551,54 @@ export default function DevModeStudio() {
             {chatMessages.map((message, idx) => (
               <div
                 key={idx}
-                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                className={`group relative min-w-0 rounded-2xl border p-4 sm:p-5 ${
+                  message.role === 'user'
+                    ? 'border-abyss-400/30 bg-abyss-600/20'
+                    : 'border-abyss-600/30 bg-abyss-950/40'
+                }`}
               >
-                <div
-                  className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm ${
-                    message.role === 'user'
-                      ? 'rounded-br-md bg-abyss-500/30 text-pearl ring-1 ring-abyss-400/30'
-                      : 'rounded-bl-md bg-abyss-900/60 text-muted ring-1 ring-abyss-600/40'
-                  }`}
-                >
-                  {message.role === 'user' ? (
-                    <p className="whitespace-pre-wrap break-words leading-relaxed">{message.content}</p>
-                  ) : (
-                    <MarkdownChat content={message.content} />
-                  )}
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p
+                    className={`text-xs font-semibold uppercase tracking-[0.16em] ${
+                      message.role === 'user' ? 'text-abyss-200/70' : 'text-amber-200/70'
+                    }`}
+                  >
+                    {message.role === 'user' ? 'You' : 'Dev Assistant'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => copyMessage(message.content, idx)}
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted opacity-0 transition-opacity hover:bg-abyss-700/50 hover:text-pearl focus-visible:opacity-100 group-hover:opacity-100"
+                    title="Copy message"
+                    aria-label="Copy message"
+                  >
+                    {copiedIndex === idx ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                  </button>
                 </div>
+                {message.role === 'user' ? (
+                  <p className="whitespace-pre-wrap break-words leading-relaxed text-pearl/90">{message.content}</p>
+                ) : (
+                  <div className="min-w-0">
+                    <MarkdownChat content={message.content} />
+                  </div>
+                )}
               </div>
             ))}
-
-            {chatSending && (
-              <div className="flex justify-start">
-                <div className="flex items-center gap-2 rounded-2xl rounded-bl-md bg-abyss-900/60 px-4 py-3 text-sm text-muted ring-1 ring-abyss-600/40">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  The Dev Assistant is thinking...
-                </div>
-              </div>
-            )}
           </div>
 
           {chatError && (
             <div className="mt-3 flex items-start gap-2 rounded-xl border border-coral-500/30 bg-coral-900/20 px-3.5 py-2.5 text-sm text-coral-200">
               <X className="mt-0.5 h-4 w-4 shrink-0" />
               <span>{chatError}</span>
+            </div>
+          )}
+
+          {chatSending && (
+            <div className="rounded-2xl border border-abyss-600/30 bg-abyss-950/40 p-4 sm:p-5">
+              <div className="flex items-center gap-2 text-sm text-muted">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                The Dev Assistant is thinking...
+              </div>
             </div>
           )}
 
@@ -593,33 +617,36 @@ export default function DevModeStudio() {
             {activeModelLabel && <span className="ml-auto truncate">Responding with: {activeModelLabel}</span>}
           </div>
 
-          <div className="mt-2 flex items-end gap-2">
-            <textarea
-              ref={inputRef}
-              value={chatInput}
-              onChange={(e) => {
-                setChatInput(e.target.value);
-                autoGrowInput();
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
-              placeholder="Ask the Dev Assistant anything — Enter to send, Shift+Enter for a new line"
-              rows={1}
-              className="max-h-44 min-h-11 w-full flex-1 resize-none rounded-xl border border-abyss-600/40 bg-abyss-950/60 px-3.5 py-2.5 text-sm text-pearl outline-none placeholder:text-muted/50 focus:border-abyss-400/60"
-            />
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={chatSending || !chatInput.trim()}
-              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-abyss-500/80 text-pearl transition-colors hover:bg-abyss-400 disabled:opacity-50"
-              aria-label="Send message"
-            >
-              {chatSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            </button>
+          <div className="mt-2 min-w-0">
+            <div className="relative">
+              <textarea
+                ref={inputRef}
+                value={chatInput}
+                onChange={(e) => {
+                  setChatInput(e.target.value);
+                  autoGrowInput();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                placeholder="Ask the Dev Assistant anything — Enter to send, Shift+Enter for a new line"
+                rows={1}
+                className="min-h-12 max-h-44 w-full resize-none overflow-y-auto rounded-xl border border-abyss-600/40 bg-abyss-900/60 py-3 pl-4 pr-14 text-sm leading-relaxed text-pearl outline-none placeholder:text-muted/50 focus:border-abyss-400/60"
+              />
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={chatSending || !chatInput.trim()}
+                className="absolute bottom-2.5 right-2.5 z-10 inline-flex h-7 w-7 items-center justify-center rounded-md text-pearl/70 transition-colors hover:bg-abyss-700/40 hover:text-pearl disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label="Send message"
+                title="Send (Enter)"
+              >
+                {chatSending ? <Loader2 className="h-[18px] w-[18px] animate-spin" /> : <Send className="h-[18px] w-[18px]" />}
+              </button>
+            </div>
           </div>
         </div>
       )}

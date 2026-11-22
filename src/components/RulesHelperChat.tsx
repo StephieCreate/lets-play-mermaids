@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BookOpenCheck, Eraser, Layers, Loader2, LockKeyhole, Send, Users, X } from 'lucide-react';
+import { BookOpenCheck, Check, Copy, Eraser, Layers, Loader2, LockKeyhole, Send, Users, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useFontSettings } from '@/context/FontSettingsContext';
 import { supabase } from '@/lib/supabase';
 
 interface SourceChip {
@@ -184,11 +185,13 @@ function AssistantMarkdown({ content }: { content: string }) {
 
 export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) {
   const { user } = useAuth();
+  const { fontFamilyClass, fontPx } = useFontSettings();
 
   const [messages, setMessages] = useState<ChatMessage[]>(() => loadSession());
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [selectedCharacterId, setSelectedCharacterId] = useState('');
   const [savedCharacters, setSavedCharacters] = useState<Array<{ id: string; name: string }>>([]);
   const [showQuickPrompts, setShowQuickPrompts] = useState(false);
@@ -251,6 +254,12 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
     setError(null);
     setInput('');
     if (inputRef.current) inputRef.current.style.height = 'auto';
+  };
+
+  const copyMessage = (content: string, idx: number) => {
+    void navigator.clipboard.writeText(content);
+    setCopiedIndex(idx);
+    window.setTimeout(() => setCopiedIndex(null), 1800);
   };
 
   const sendMessage = useCallback(
@@ -408,7 +417,7 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
         </button>
       </div>
 
-      <div ref={feedRef} className="max-h-[58vh] min-h-[16rem] space-y-3 overflow-y-auto pr-1">
+      <div ref={feedRef} className="max-h-[64vh] min-h-[20rem] min-w-0 space-y-3 overflow-y-auto pr-1">
         {messages.length === 0 && !sending && (
           <div className="rounded-xl border border-dashed border-abyss-600/40 bg-abyss-950/30 p-5 text-center">
             <p className="mb-3 text-sm text-muted">
@@ -430,19 +439,44 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
         )}
 
         {messages.map((message, idx) => (
-          <div key={idx} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div
-              className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm ${
-                message.role === 'user'
-                  ? 'rounded-br-md bg-abyss-500/30 text-pearl ring-1 ring-abyss-400/30'
-                  : 'rounded-bl-md bg-abyss-900/60 text-muted ring-1 ring-abyss-600/40'
-              }`}
-            >
-              {message.role === 'user' ? (
-                <p className="whitespace-pre-wrap break-words leading-relaxed">{message.content}</p>
-              ) : (
-                <>
+          <div
+            key={idx}
+            className={`group relative min-w-0 rounded-2xl border p-4 sm:p-5 ${
+              message.role === 'user'
+                ? 'border-abyss-400/30 bg-abyss-600/20'
+                : 'border-abyss-600/30 bg-abyss-950/40'
+            }`}
+          >
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p
+                className={`text-xs font-semibold uppercase tracking-[0.16em] ${
+                  message.role === 'user' ? 'text-abyss-200/70' : 'text-abyss-300/70'
+                }`}
+              >
+                {message.role === 'user' ? 'You' : 'Rules Helper'}
+              </p>
+              <button
+                type="button"
+                onClick={() => copyMessage(message.content, idx)}
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted opacity-0 transition-opacity hover:bg-abyss-700/50 hover:text-pearl focus-visible:opacity-100 group-hover:opacity-100"
+                title="Copy message"
+                aria-label="Copy message"
+              >
+                {copiedIndex === idx ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+              </button>
+            </div>
+            {message.role === 'user' ? (
+              <p
+                className={`whitespace-pre-wrap break-words leading-relaxed text-pearl/90 ${fontFamilyClass}`}
+                style={{ fontSize: fontPx }}
+              >
+                {message.content}
+              </p>
+            ) : (
+              <>
+                <div className={`min-w-0 ${fontFamilyClass}`} style={{ fontSize: fontPx }}>
                   <AssistantMarkdown content={message.content} />
+                </div>
                   {(message.characterNames?.length ?? 0) > 0 ? (
                     <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-foam-400/30 bg-foam-900/25 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-foam-200">
                       <Users className="h-3 w-3" />
@@ -474,15 +508,16 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
                   )}
                 </>
               )}
-            </div>
           </div>
         ))}
 
         {sending && (
-          <div className="flex justify-start">
-            <div className="flex items-center gap-2 rounded-2xl rounded-bl-md bg-abyss-900/60 px-4 py-3 text-sm text-muted ring-1 ring-abyss-600/40">
+          <div className="rounded-2xl border border-abyss-600/30 bg-abyss-950/40 p-4 sm:p-5">
+            <div className="flex items-center gap-2 text-sm text-muted">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Looking through the rules...
+              <span className={fontFamilyClass} style={{ fontSize: fontPx }}>
+                Looking through the rules...
+              </span>
             </div>
           </div>
         )}
@@ -522,11 +557,8 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
         )}
       </div>
 
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <label
-          htmlFor="character-context"
-          className="shrink-0 text-xs font-medium text-muted"
-        >
+      <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-abyss-700/30 bg-abyss-950/40 px-3 py-2">
+        <label htmlFor="character-context" className="shrink-0 text-xs font-medium text-muted">
           Character Context
         </label>
         <select
@@ -534,7 +566,7 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
           value={selectedCharacterId}
           onChange={(e) => setSelectedCharacterId(e.target.value)}
           disabled={savedCharacters.length === 0}
-          className="min-h-9 max-w-[16rem] rounded-lg border border-abyss-600/40 bg-abyss-950/60 px-2.5 py-1.5 text-xs text-pearl outline-none transition-colors focus:border-abyss-400/60 disabled:cursor-not-allowed disabled:opacity-60"
+          className="min-h-9 max-w-[16rem] flex-1 rounded-lg border border-abyss-600/40 bg-abyss-950/60 px-2.5 py-1.5 text-xs text-pearl outline-none transition-colors focus:border-abyss-400/60 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {savedCharacters.length === 0 ? (
             <option value="">No saved characters</option>
@@ -553,33 +585,37 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
         </select>
       </div>
 
-      <div className="mt-2 flex items-end gap-2">
-        <textarea
-          ref={inputRef}
-          value={input}
-          onChange={(e) => {
-            setInput(e.target.value);
-            autoGrowInput();
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              handleSend();
-            }
-          }}
-          placeholder="Ask about the rules, your characters, or building Extras..."
-          rows={1}
-          className="max-h-40 min-h-11 w-full flex-1 resize-none rounded-xl border border-abyss-600/40 bg-abyss-950/60 px-3.5 py-2.5 text-sm text-pearl outline-none placeholder:text-muted/50 focus:border-abyss-400/60"
-        />
-        <button
-          type="button"
-          onClick={handleSend}
-          disabled={sending || !input.trim()}
-          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-abyss-500/80 text-pearl transition-colors hover:bg-abyss-400 disabled:opacity-50"
-          aria-label="Send message"
-        >
-          {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-        </button>
+      <div className="mt-3 min-w-0">
+        <div className="relative">
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={(e) => {
+              setInput(e.target.value);
+              autoGrowInput();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
+            placeholder="Ask about the rules, your characters, or building Extras..."
+            rows={1}
+            className="min-h-12 max-h-40 w-full resize-none overflow-y-auto rounded-xl border border-abyss-600/40 bg-abyss-900/60 py-3 pl-4 pr-14 text-sm leading-relaxed text-pearl outline-none placeholder:text-muted/50 focus:border-abyss-400/60"
+          />
+          <button
+            type="button"
+            onClick={handleSend}
+            disabled={sending || !input.trim()}
+            className="absolute bottom-2.5 right-2.5 z-10 inline-flex h-7 w-7 items-center justify-center rounded-md text-pearl/70 transition-colors hover:bg-abyss-700/40 hover:text-pearl disabled:cursor-not-allowed disabled:opacity-40"
+            aria-label="Send message"
+            title="Send (Enter)"
+          >
+            {sending ? <Loader2 className="h-[18px] w-[18px] animate-spin" /> : <Send className="h-[18px] w-[18px]" />}
+          </button>
+        </div>
+        <p className="mt-1.5 text-center text-[11px] text-muted/70">Enter to send · Shift+Enter for a new line</p>
       </div>
     </section>
   );
