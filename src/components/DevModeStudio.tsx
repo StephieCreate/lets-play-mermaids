@@ -10,6 +10,7 @@ import {
   ScanLine,
   Send,
   Terminal,
+  Trash2,
   X,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
@@ -27,12 +28,79 @@ import {
 type StudioTab = 'viewer' | 'scanner' | 'chat';
 
 interface ChatMessage {
+  id: string | null;
   role: 'user' | 'assistant';
   content: string;
+  deleting?: boolean;
 }
 
 const BASELINE_KEY = 'dev_mode_rule_baseline_v1';
 const MAX_CHAT_FILES_BYTES = 900000;
+const MAX_SAVED_MESSAGES = 200;
+
+interface SavedChatRow {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+async function fetchSavedMessages(userId: string): Promise<ChatMessage[]> {
+  const { data, error } = await supabase
+    .from('assistant_chat_messages')
+    .select('id, role, content')
+    .eq('user_id', userId)
+    .eq('chat_type', 'dev_assistant')
+    .order('created_at', { ascending: true })
+    .limit(MAX_SAVED_MESSAGES);
+  if (error) {
+    console.error('Could not load saved dev chat', error);
+    return [];
+  }
+  return ((data ?? []) as SavedChatRow[]).map((row) => ({ id: row.id, role: row.role, content: row.content }));
+}
+
+async function insertChatMessage(
+  userId: string,
+  role: 'user' | 'assistant',
+  content: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('assistant_chat_messages')
+    .insert({ user_id: userId, chat_type: 'dev_assistant', role, content })
+    .select('id')
+    .single();
+  if (error || !data) {
+    console.error('Could not save dev chat message', error);
+    return null;
+  }
+  return (data as { id: string }).id;
+}
+
+async function deleteChatMessage(rowId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('assistant_chat_messages')
+    .delete()
+    .eq('id', rowId)
+    .eq('chat_type', 'dev_assistant');
+  if (error) {
+    console.error('Could not delete dev chat message', error);
+    return false;
+  }
+  return true;
+}
+
+async function clearChatMessages(userId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('assistant_chat_messages')
+    .delete()
+    .eq('user_id', userId)
+    .eq('chat_type', 'dev_assistant');
+  if (error) {
+    console.error('Could not clear dev chat', error);
+    return false;
+  }
+  return true;
+}
 
 function loadBaseline(): Record<string, string> {
   try {
@@ -59,6 +127,8 @@ export default function DevModeStudio() {
   const [baseline, setBaseline] = useState<Record<string, string>>(() => loadBaseline());
 
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatHistoryLoading, setChatHistoryLoading] = useState(true);
+  const [confirmClear, setConfirmClear] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [chatSending, setChatSending] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
@@ -174,6 +244,23 @@ export default function DevModeStudio() {
   }, [user]);
 
   useEffect(() => {
+    if (!user) {
+      setChatMessages([]);
+      setChatHistoryLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setChatHistoryLoading(true);
+    fetchSavedMessages(user.id).then((saved) => {
+      if (!cancelled) setChatMessages(saved);
+      setChatHistoryLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  useEffect(() => {
     feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight, behavior: 'smooth' });
   }, [chatMessages, chatSending]);
 
@@ -268,7 +355,8 @@ export default function DevModeStudio() {
         if (!data?.reply) {
           throw new Error('The Dev Assistant returned an empty response. Try again.');
         }
-        setChatMessages([...history, { role: 'assistant', content: data.reply }]);
+        const savedId = await insertChatMessage(user.id, 'assistant', data.reply);
+        setChatMessages([...history, { id: savedId, role: 'assistant', content: data.reply }]);
       } catch (err) {
         setChatError(err instanceof Error ? err.message : 'The Dev Assistant could not respond. Please try again.');
       } finally {
@@ -280,18 +368,44 @@ export default function DevModeStudio() {
 
   const handleSend = () => {
     const text = chatInput.trim();
-    if (!text || chatSending) return;
-    const nextHistory = [...chatMessages, { role: 'user' as const, content: text }];
+    if (!text || chatSending || !user) return;
+    const optimistic: ChatMessage = { id: null, role: 'user', content: text };
+    const nextHistory = [...chatMessages, optimistic];
     setChatMessages(nextHistory);
     setChatInput('');
     if (inputRef.current) inputRef.current.style.height = 'auto';
-    void sendChat(nextHistory, text);
+    void (async () => {
+      const savedId = await insertChatMessage(user.id, 'user', text);
+      if (savedId) {
+        setChatMessages((prev) => prev.map((m) => (m === optimistic ? { ...m, id: savedId } : m)));
+      }
+      await sendChat(nextHistory, text);
+    })();
   };
 
-  const clearChat = () => {
+  const clearChat = async () => {
+    if (!user) return;
     setChatMessages([]);
+    setConfirmClear(false);
     setChatError(null);
     setChatInput('');
+    await clearChatMessages(user.id);
+  };
+
+  const deleteMessage = async (idx: number) => {
+    const target = chatMessages[idx];
+    if (!target?.id) {
+      setChatMessages((prev) => prev.filter((_, i) => i !== idx));
+      return;
+    }
+    setChatMessages((prev) => prev.map((m, i) => (i === idx ? { ...m, deleting: true } : m)));
+    const ok = await deleteChatMessage(target.id);
+    if (ok) {
+      setChatMessages((prev) => prev.filter((_, i) => i !== idx));
+    } else {
+      setChatMessages((prev) => prev.map((m, i) => (i === idx ? { ...m, deleting: false } : m)));
+      setChatError('That message could not be deleted. Please try again.');
+    }
   };
 
   const copyMessage = (content: string, idx: number) => {
@@ -517,16 +631,42 @@ export default function DevModeStudio() {
             </p>
             <button
               type="button"
-              onClick={clearChat}
+              onClick={() => setConfirmClear(true)}
               disabled={chatMessages.length === 0}
               className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-abyss-500/35 bg-abyss-800/40 px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:text-pearl disabled:opacity-40"
             >
               <Eraser className="h-3.5 w-3.5" />
               New Chat / Clear
             </button>
+            {confirmClear && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-coral-300">Clear all?</span>
+                <button
+                  type="button"
+                  onClick={clearChat}
+                  className="rounded-lg bg-coral-500/25 px-2.5 py-1.5 text-xs font-semibold text-coral-200 transition-colors hover:bg-coral-500/40"
+                >
+                  Yes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmClear(false)}
+                  className="rounded-lg border border-abyss-400/30 px-2.5 py-1.5 text-xs font-medium text-muted transition-colors hover:text-pearl"
+                >
+                  No
+                </button>
+              </div>
+            )}
           </div>
 
           <div ref={feedRef} className="max-h-[62vh] min-h-[20rem] min-w-0 space-y-3 overflow-y-auto pr-1">
+            {chatHistoryLoading ? (
+              <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading your saved conversation...
+              </div>
+            ) : (
+              <>
             {chatMessages.length === 0 && !chatSending && (
               <div className="rounded-xl border border-dashed border-abyss-600/40 bg-abyss-950/30 p-5 text-center">
                 <p className="mb-3 text-sm text-muted">
@@ -550,12 +690,12 @@ export default function DevModeStudio() {
 
             {chatMessages.map((message, idx) => (
               <div
-                key={idx}
+                key={message.id ?? `local-${idx}`}
                 className={`group relative min-w-0 rounded-2xl border p-4 sm:p-5 ${
                   message.role === 'user'
                     ? 'border-abyss-400/30 bg-abyss-600/20'
                     : 'border-abyss-600/30 bg-abyss-950/40'
-                }`}
+                } ${message.deleting ? 'opacity-40 pointer-events-none' : ''}`}
               >
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <p
@@ -565,15 +705,27 @@ export default function DevModeStudio() {
                   >
                     {message.role === 'user' ? 'You' : 'Dev Assistant'}
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => copyMessage(message.content, idx)}
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted opacity-0 transition-opacity hover:bg-abyss-700/50 hover:text-pearl focus-visible:opacity-100 group-hover:opacity-100"
-                    title="Copy message"
-                    aria-label="Copy message"
-                  >
-                    {copiedIndex === idx ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
-                  </button>
+                  <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                    <button
+                      type="button"
+                      onClick={() => copyMessage(message.content, idx)}
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-abyss-700/50 hover:text-pearl"
+                      title="Copy message"
+                      aria-label="Copy message"
+                    >
+                      {copiedIndex === idx ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void deleteMessage(idx)}
+                      disabled={message.deleting}
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-coral-900/30 hover:text-coral-300 disabled:opacity-40"
+                      title="Delete message"
+                      aria-label="Delete message"
+                    >
+                      {message.deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
                 {message.role === 'user' ? (
                   <p className="whitespace-pre-wrap break-words leading-relaxed text-pearl/90">{message.content}</p>
@@ -584,23 +736,25 @@ export default function DevModeStudio() {
                 )}
               </div>
             ))}
-          </div>
 
-          {chatError && (
-            <div className="mt-3 flex items-start gap-2 rounded-xl border border-coral-500/30 bg-coral-900/20 px-3.5 py-2.5 text-sm text-coral-200">
-              <X className="mt-0.5 h-4 w-4 shrink-0" />
-              <span>{chatError}</span>
-            </div>
-          )}
-
-          {chatSending && (
-            <div className="rounded-2xl border border-abyss-600/30 bg-abyss-950/40 p-4 sm:p-5">
-              <div className="flex items-center gap-2 text-sm text-muted">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                The Dev Assistant is thinking...
+            {chatError && (
+              <div className="mt-3 flex items-start gap-2 rounded-xl border border-coral-500/30 bg-coral-900/20 px-3.5 py-2.5 text-sm text-coral-200">
+                <X className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{chatError}</span>
               </div>
-            </div>
-          )}
+            )}
+
+            {chatSending && (
+              <div className="rounded-2xl border border-abyss-600/30 bg-abyss-950/40 p-4 sm:p-5">
+                <div className="flex items-center gap-2 text-sm text-muted">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  The Dev Assistant is thinking...
+                </div>
+              </div>
+            )}
+              </>
+            )}
+          </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-abyss-700/30 bg-abyss-950/40 px-3 py-2 text-[11px] text-muted">
             <span>

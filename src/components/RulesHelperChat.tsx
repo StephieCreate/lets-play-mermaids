@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BookOpenCheck, Check, Copy, Eraser, Layers, Loader2, LockKeyhole, Send, Users, X } from 'lucide-react';
+import { BookOpenCheck, Check, Copy, Eraser, Layers, Loader2, LockKeyhole, Send, Trash2, Users, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useFontSettings } from '@/context/FontSettingsContext';
 import { supabase } from '@/lib/supabase';
@@ -10,23 +10,18 @@ interface SourceChip {
 }
 
 interface ChatMessage {
+  id: string | null;
   role: 'user' | 'assistant';
   content: string;
   sources?: SourceChip[];
   usedCharacters?: boolean;
   characterNames?: string[];
+  deleting?: boolean;
 }
 
-const SESSION_KEY = 'rules_helper_chat_session_v1';
+const CHAT_TYPE = 'rules_helper';
 const MAX_HISTORY = 10;
-
-const STARTER_CHIPS = [
-  'How do I get started?',
-  'Explain Stamina, Dice & Daily Saves',
-  'Look up my saved characters',
-  'Help me build an Extra',
-  'Give me a blank Custom Apex template',
-];
+const MAX_SAVED_MESSAGES = 200;
 
 const QUICK_PROMPTS = [
   'How does the Bond system work?',
@@ -41,23 +36,92 @@ interface SessionPayload {
   messages: ChatMessage[];
 }
 
-function loadSession(): ChatMessage[] {
-  try {
-    const raw = sessionStorage.getItem(SESSION_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as SessionPayload;
-    return Array.isArray(parsed.messages) ? parsed.messages.slice(-40) : [];
-  } catch {
-    return [];
-  }
+interface SavedAssistantMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  metadata: {
+    sources?: SourceChip[];
+    usedCharacters?: boolean;
+    characterNames?: string[];
+  } | null;
 }
 
-function saveSession(messages: ChatMessage[]) {
-  try {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ messages: messages.slice(-40) } satisfies SessionPayload));
-  } catch {
-    // Session-only storage — ignore quota failures silently.
+async function fetchSavedMessages(userId: string): Promise<ChatMessage[]> {
+  const { data, error } = await supabase
+    .from('assistant_chat_messages')
+    .select('id, role, content, metadata')
+    .eq('user_id', userId)
+    .eq('chat_type', CHAT_TYPE)
+    .order('created_at', { ascending: true })
+    .limit(MAX_SAVED_MESSAGES);
+  if (error) {
+    console.error('Could not load saved helper chat', error);
+    return [];
   }
+  const rows = (data ?? []) as SavedAssistantMessage[];
+  return rows.map((row) => ({
+    id: row.id,
+    role: row.role,
+    content: row.content,
+    sources: row.metadata?.sources ?? [],
+    usedCharacters: row.metadata?.usedCharacters ?? false,
+    characterNames: row.metadata?.characterNames ?? [],
+  }));
+}
+
+async function insertAssistantMessage(
+  userId: string,
+  role: 'user' | 'assistant',
+  content: string,
+  metadata: ChatMessage,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('assistant_chat_messages')
+    .insert({
+      user_id: userId,
+      chat_type: CHAT_TYPE,
+      role,
+      content,
+      metadata: {
+        sources: metadata.sources ?? [],
+        usedCharacters: metadata.usedCharacters ?? false,
+        characterNames: metadata.characterNames ?? [],
+      },
+    })
+    .select('id')
+    .single();
+  if (error || !data) {
+    console.error('Could not save helper chat message', error);
+    return null;
+  }
+  return (data as { id: string }).id;
+}
+
+async function deleteAssistantMessage(rowId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('assistant_chat_messages')
+    .delete()
+    .eq('id', rowId)
+    .eq('chat_type', CHAT_TYPE);
+  if (error) {
+    console.error('Could not delete helper chat message', error);
+    return false;
+  }
+  return true;
+}
+
+async function clearAssistantMessages(userId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('assistant_chat_messages')
+    .delete()
+    .eq('user_id', userId)
+    .eq('chat_type', CHAT_TYPE);
+  if (error) {
+    console.error('Could not clear helper chat', error);
+    return false;
+  }
+  return true;
 }
 
 // Minimal safe markdown renderer: headings, bold, inline code, lists, fences.
@@ -187,7 +251,9 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
   const { user } = useAuth();
   const { fontFamilyClass, fontPx } = useFontSettings();
 
-  const [messages, setMessages] = useState<ChatMessage[]>(() => loadSession());
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [confirmClear, setConfirmClear] = useState(false);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -201,8 +267,21 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    saveSession(messages);
-  }, [messages]);
+    if (!user) {
+      setMessages([]);
+      setHistoryLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setHistoryLoading(true);
+    fetchSavedMessages(user.id).then((saved) => {
+      if (!cancelled) setMessages(saved);
+      setHistoryLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   useEffect(() => {
     feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight, behavior: 'smooth' });
@@ -249,17 +328,37 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
     };
   }, [user]);
 
-  const clearChat = () => {
+  const clearChat = async () => {
+    if (!user) return;
     setMessages([]);
+    setConfirmClear(false);
     setError(null);
     setInput('');
     if (inputRef.current) inputRef.current.style.height = 'auto';
+    await clearAssistantMessages(user.id);
   };
 
   const copyMessage = (content: string, idx: number) => {
     void navigator.clipboard.writeText(content);
     setCopiedIndex(idx);
     window.setTimeout(() => setCopiedIndex(null), 1800);
+  };
+
+  const deleteMessage = async (idx: number) => {
+    const target = messages[idx];
+    if (!target?.id) {
+      // Unsaved bubble (persist failed earlier) — just drop it locally.
+      setMessages((prev) => prev.filter((_, i) => i !== idx));
+      return;
+    }
+    setMessages((prev) => prev.map((m, i) => (i === idx ? { ...m, deleting: true } : m)));
+    const ok = await deleteAssistantMessage(target.id);
+    if (ok) {
+      setMessages((prev) => prev.filter((_, i) => i !== idx));
+    } else {
+      setMessages((prev) => prev.map((m, i) => (i === idx ? { ...m, deleting: false } : m)));
+      setError('That message could not be deleted. Please try again.');
+    }
   };
 
   const sendMessage = useCallback(
@@ -309,18 +408,18 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
         if (!data?.reply) {
           throw new Error('The Rules Helper returned an empty response. Try again.');
         }
-        setMessages([
-          ...history,
-          {
-            role: 'assistant',
-            content: data.reply,
-            sources: Array.isArray(data.sources) ? data.sources : [],
-            usedCharacters: Boolean(data.usedCharacters),
-            characterNames: Array.isArray(data.characterNames)
-              ? (data.characterNames as unknown[]).filter((n): n is string => typeof n === 'string')
-              : [],
-          },
-        ]);
+        const assistantMeta: ChatMessage = {
+          id: null,
+          role: 'assistant',
+          content: data.reply,
+          sources: Array.isArray(data.sources) ? data.sources : [],
+          usedCharacters: Boolean(data.usedCharacters),
+          characterNames: Array.isArray(data.characterNames)
+            ? (data.characterNames as unknown[]).filter((n): n is string => typeof n === 'string')
+            : [],
+        };
+        const savedId = await insertAssistantMessage(user.id, 'assistant', data.reply, assistantMeta);
+        setMessages([...history, { ...assistantMeta, id: savedId }]);
       } catch (err) {
         setError(
           err instanceof Error
@@ -336,19 +435,33 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
 
   const handleSend = () => {
     const text = input.trim();
-    if (!text || sending) return;
-    const nextHistory = [...messages, { role: 'user' as const, content: text }];
+    if (!text || sending || !user) return;
+    const optimistic: ChatMessage = { id: null, role: 'user', content: text };
+    const nextHistory = [...messages, optimistic];
     setMessages(nextHistory);
     setInput('');
     if (inputRef.current) inputRef.current.style.height = 'auto';
-    void sendMessage(nextHistory, text, selectedCharacterId);
+    void (async () => {
+      const savedId = await insertAssistantMessage(user.id, 'user', text, optimistic);
+      if (savedId) {
+        setMessages((prev) => prev.map((m) => (m === optimistic ? { ...m, id: savedId } : m)));
+      }
+      await sendMessage(nextHistory, text, selectedCharacterId);
+    })();
   };
 
   const handleChip = (chip: string) => {
-    if (sending) return;
-    const nextHistory = [...messages, { role: 'user' as const, content: chip }];
+    if (sending || !user) return;
+    const optimistic: ChatMessage = { id: null, role: 'user', content: chip };
+    const nextHistory = [...messages, optimistic];
     setMessages(nextHistory);
-    void sendMessage(nextHistory, chip, selectedCharacterId);
+    void (async () => {
+      const savedId = await insertAssistantMessage(user.id, 'user', chip, optimistic);
+      if (savedId) {
+        setMessages((prev) => prev.map((m) => (m === optimistic ? { ...m, id: savedId } : m)));
+      }
+      await sendMessage(nextHistory, chip, selectedCharacterId);
+    })();
   };
 
   const autoGrowInput = () => {
@@ -368,7 +481,7 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
           <div>
             <h2 className="font-display text-2xl font-semibold text-pearl">Ask the Rules Helper</h2>
             <p className="text-xs text-muted">
-              Uses your active AI key • Looks up rules on demand • Remembers last 10 messages
+              Uses your active AI key • Looks up rules on demand • Saved to your account
             </p>
           </div>
         </div>
@@ -401,23 +514,50 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
           <div className="min-w-0">
             <h2 className="font-display text-2xl font-semibold text-pearl">Ask the Rules Helper</h2>
             <p className="truncate text-xs text-muted">
-              Uses your active AI key • Looks up rules on demand • Remembers last 10 messages
+              Uses your active AI key • Looks up rules on demand • Saved to your account
               {modelLabel ? ` • ${modelLabel}` : ''}
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={clearChat}
-          disabled={messages.length === 0}
-          className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border border-abyss-500/35 bg-abyss-800/40 px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:text-pearl disabled:opacity-40"
-        >
-          <Eraser className="h-3.5 w-3.5" />
-          Clear Chat
-        </button>
+        {confirmClear ? (
+          <div className="shrink-0 flex items-center gap-1.5">
+            <span className="text-xs text-coral-300">Clear all?</span>
+            <button
+              type="button"
+              onClick={clearChat}
+              className="rounded-lg bg-coral-500/25 px-2.5 py-1.5 text-xs font-semibold text-coral-200 transition-colors hover:bg-coral-500/40"
+            >
+              Yes
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmClear(false)}
+              className="rounded-lg border border-abyss-400/30 px-2.5 py-1.5 text-xs font-medium text-muted transition-colors hover:text-pearl"
+            >
+              No
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setConfirmClear(true)}
+            disabled={messages.length === 0}
+            className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border border-abyss-500/35 bg-abyss-800/40 px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:text-pearl disabled:opacity-40"
+          >
+            <Eraser className="h-3.5 w-3.5" />
+            Clear Chat
+          </button>
+        )}
       </div>
 
       <div ref={feedRef} className="max-h-[64vh] min-h-[20rem] min-w-0 space-y-3 overflow-y-auto pr-1">
+        {historyLoading ? (
+          <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading your saved conversation...
+          </div>
+        ) : (
+          <>
         {messages.length === 0 && !sending && (
           <div className="rounded-xl border border-dashed border-abyss-600/40 bg-abyss-950/30 p-5 text-center">
             <p className="mb-3 text-sm text-muted">
@@ -440,12 +580,12 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
 
         {messages.map((message, idx) => (
           <div
-            key={idx}
+            key={message.id ?? `local-${idx}`}
             className={`group relative min-w-0 rounded-2xl border p-4 sm:p-5 ${
               message.role === 'user'
                 ? 'border-abyss-400/30 bg-abyss-600/20'
                 : 'border-abyss-600/30 bg-abyss-950/40'
-            }`}
+            } ${message.deleting ? 'opacity-40 pointer-events-none' : ''}`}
           >
             <div className="mb-2 flex items-center justify-between gap-2">
               <p
@@ -455,15 +595,27 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
               >
                 {message.role === 'user' ? 'You' : 'Rules Helper'}
               </p>
-              <button
-                type="button"
-                onClick={() => copyMessage(message.content, idx)}
-                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted opacity-0 transition-opacity hover:bg-abyss-700/50 hover:text-pearl focus-visible:opacity-100 group-hover:opacity-100"
-                title="Copy message"
-                aria-label="Copy message"
-              >
-                {copiedIndex === idx ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
-              </button>
+              <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                <button
+                  type="button"
+                  onClick={() => copyMessage(message.content, idx)}
+                  className="flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-abyss-700/50 hover:text-pearl"
+                  title="Copy message"
+                  aria-label="Copy message"
+                >
+                  {copiedIndex === idx ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void deleteMessage(idx)}
+                  disabled={message.deleting}
+                  className="flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-coral-900/30 hover:text-coral-300 disabled:opacity-40"
+                  title="Delete message"
+                  aria-label="Delete message"
+                >
+                  {message.deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
             {message.role === 'user' ? (
               <p
@@ -520,6 +672,8 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
               </span>
             </div>
           </div>
+        )}
+          </>
         )}
       </div>
 
