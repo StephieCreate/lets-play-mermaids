@@ -29,6 +29,7 @@ import type { CartridgeRule } from '@/lib/gameCartridge';
 interface RulesPageProps {
   onBack: () => void;
   onSignIn: () => void;
+  hasRulesUpdate?: boolean;
   embedded?: boolean;
 }
 
@@ -138,7 +139,7 @@ function Badge({ kind }: { kind: RuleTab['badge'] }) {
   );
 }
 
-export default function RulesPage({ onBack, onSignIn, embedded = false }: RulesPageProps) {
+export default function RulesPage({ onBack, onSignIn, hasRulesUpdate = false, embedded = false }: RulesPageProps) {
   const { user, loading: authLoading, isAdmin } = useAuth();
   const isWhitelistedAdmin = isAdmin;
 
@@ -471,7 +472,15 @@ export default function RulesPage({ onBack, onSignIn, embedded = false }: RulesP
                 : 'text-muted hover:bg-abyss-800/40 hover:text-pearl'
             }`}
           >
-            <ShoppingBag className="h-4 w-4 shrink-0" />
+            <span className="relative flex h-4 w-4 shrink-0 items-center justify-center">
+              <ShoppingBag className="h-4 w-4" />
+              {hasRulesUpdate && (
+                <span
+                  className="absolute -right-1 -top-1 flex h-3 w-3 items-center justify-center rounded-full bg-red-500 shadow-sm shadow-red-950/70 ring-2 ring-abyss-950"
+                  aria-label="New rules update available"
+                />
+              )}
+            </span>
             <span className="whitespace-nowrap">Store</span>
           </button>
 

@@ -27,6 +27,7 @@ interface HeaderProps {
   onSignIn: () => void;
   onReportBug: () => void;
   hasUnreadNews?: boolean;
+  hasRulesUpdate?: boolean;
 }
 
 const PRIMARY_TABS: { id: Exclude<AppTab, 'settings'>; label: string; icon: typeof User }[] = [
@@ -43,6 +44,7 @@ export default function Header({
   onSignIn,
   onReportBug,
   hasUnreadNews = false,
+  hasRulesUpdate = false,
 }: HeaderProps) {
   const { user, signOut } = useAuth();
 
@@ -61,6 +63,7 @@ export default function Header({
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             const showNewsBadge = tab.id === 'news' && hasUnreadNews;
+            const showRulesBadge = tab.id === 'rules' && hasRulesUpdate;
 
             return (
               <button
@@ -78,10 +81,10 @@ export default function Header({
                       isActive ? 'text-pearl' : 'text-abyss-200/70 group-hover:text-pearl'
                     }`}
                   />
-                  {showNewsBadge && (
+                  {(showNewsBadge || showRulesBadge) && (
                     <span
                       className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white shadow-sm shadow-red-950/70 ring-2 ring-abyss-950"
-                      aria-label="Unread news updates"
+                      aria-label={showRulesBadge && !showNewsBadge ? 'New rules update available' : 'Unread news updates'}
                     >
                       <Check className="h-2.5 w-2.5 stroke-[3]" />
                     </span>
@@ -199,6 +202,7 @@ export default function Header({
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             const showNewsBadge = tab.id === 'news' && hasUnreadNews;
+            const showRulesBadge = tab.id === 'rules' && hasRulesUpdate;
 
             return (
               <button
@@ -214,10 +218,10 @@ export default function Header({
                   }`}
                 >
                   <Icon className="h-4 w-4" />
-                  {showNewsBadge && (
+                  {(showNewsBadge || showRulesBadge) && (
                     <span
                       className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white shadow-sm shadow-red-950/70 ring-2 ring-abyss-950"
-                      aria-label="Unread news updates"
+                      aria-label={showRulesBadge && !showNewsBadge ? 'New rules update available' : 'Unread news updates'}
                     >
                       <Check className="h-2.5 w-2.5 stroke-[3]" />
                     </span>

@@ -96,6 +96,7 @@ export default function RulesStorePanel({ onRulesInstalled, onSignIn }: RulesSto
   const [storeError, setStoreError] = useState<string | null>(null);
   const [installedVersion, setInstalledVersion] = useState<string | null>(readStoredInstalledVersion);
   const [installing, setInstalling] = useState(false);
+  const [adminNotice, setAdminNotice] = useState<{ text: string; ok: boolean } | null>(null);
 
   const [adminVersion, setAdminVersion] = useState('');
   const [exporting, setExporting] = useState(false);
@@ -185,6 +186,7 @@ export default function RulesStorePanel({ onRulesInstalled, onSignIn }: RulesSto
     }
     onRulesInstalled(result.rules);
     persistInstalledVersion(result.version);
+    window.dispatchEvent(new Event('mermaids_cartridge_updated'));
   };
 
   const handleDownload = () => {
@@ -208,6 +210,11 @@ export default function RulesStorePanel({ onRulesInstalled, onSignIn }: RulesSto
         rules: parsed.rules,
       };
       downloadJson(JSON.stringify(payload, null, 2), `dark-ocean-rules-v${version}.json`);
+      const includesEngine = parsed.rules.some((rule) => rule.slug === 'universal-core-engine');
+      setAdminNotice({
+        text: `Exported ${parsed.rules.length} rules — ${includesEngine ? 'includes Universal Core Engine' : 'WARNING: Universal Core Engine missing'}`,
+        ok: includesEngine,
+      });
     } catch (err) {
       console.error('Cartridge export failed', err);
       setStoreError(err instanceof Error ? err.message : 'Could not export the cartridge. Please try again.');
@@ -258,7 +265,13 @@ export default function RulesStorePanel({ onRulesInstalled, onSignIn }: RulesSto
       if (error) throw error;
 
       setUploadVersion('');
+      const includesEngine = parsed.rules.some((rule) => rule.slug === 'universal-core-engine');
+      setAdminNotice({
+        text: `Published ${parsed.rules.length} rules as v${version} — ${includesEngine ? 'includes Universal Core Engine' : 'WARNING: Universal Core Engine missing'}`,
+        ok: includesEngine,
+      });
       await fetchCartridges();
+      window.dispatchEvent(new Event('mermaids_cartridge_updated'));
     } catch (err) {
       console.error('Store cartridge upload failed', err);
       setStoreError(
@@ -387,6 +400,18 @@ export default function RulesStorePanel({ onRulesInstalled, onSignIn }: RulesSto
           <p className="mb-4 text-xs text-amber-200/70">
             Export, import, and publish official cartridges. Hidden from regular players.
           </p>
+
+          {adminNotice && (
+            <p
+              className={`mb-4 rounded-xl border px-4 py-2.5 text-xs font-medium ${
+                adminNotice.ok
+                  ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200'
+                  : 'border-coral-500/30 bg-coral-900/20 text-coral-200'
+              }`}
+            >
+              {adminNotice.text}
+            </p>
+          )}
 
           <div className="space-y-5">
             <div>

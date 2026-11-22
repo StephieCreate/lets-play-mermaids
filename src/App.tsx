@@ -55,6 +55,8 @@ function AppContent() {
   const [newsPosts, setNewsPosts] = useState<NewsPost[]>([]);
   const [newsLoading, setNewsLoading] = useState(true);
   const [newsError, setNewsError] = useState<string | null>(null);
+  const [latestStoreVersion, setLatestStoreVersion] = useState<string | null>(null);
+  const [installedCartridgeVersion, setInstalledCartridgeVersion] = useState<string | null>(null);
 
   const hasUnreadNews = newsPosts.some((post) => !readNewsIds.includes(post.id));
 
@@ -77,6 +79,48 @@ function AppContent() {
   useEffect(() => {
     void fetchNewsPosts();
   }, [fetchNewsPosts]);
+
+  // Track the active store cartridge version vs. the player's installed version
+  const fetchCartridgeStatus = useCallback(async () => {
+    const { data } = await supabase
+      .from('store_cartridges')
+      .select('version')
+      .eq('is_active', true)
+      .order('uploaded_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    setLatestStoreVersion((data?.version as string | undefined) ?? null);
+    try {
+      setInstalledCartridgeVersion(localStorage.getItem('mermaids_installed_cartridge_version'));
+    } catch {
+      setInstalledCartridgeVersion(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchCartridgeStatus();
+  }, [fetchCartridgeStatus, user?.id]);
+
+  // Prefer the account-synced installed version over the local one on sign-in
+  useEffect(() => {
+    const meta = user?.user_metadata?.installed_cartridge_version;
+    if (typeof meta === 'string' && meta) {
+      setInstalledCartridgeVersion(meta);
+    }
+  }, [user]);
+
+  // Clear/update the Rules badge the instant a cartridge is installed or published
+  useEffect(() => {
+    const handleCartridgeUpdated = () => {
+      void fetchCartridgeStatus();
+    };
+    window.addEventListener('mermaids_cartridge_updated', handleCartridgeUpdated);
+    return () => window.removeEventListener('mermaids_cartridge_updated', handleCartridgeUpdated);
+  }, [fetchCartridgeStatus]);
+
+  const hasRulesUpdate = Boolean(
+    user && latestStoreVersion && latestStoreVersion !== installedCartridgeVersion
+  );
 
   // Merge locally-stored read IDs with the account's synced list on sign-in
   useEffect(() => {
@@ -165,6 +209,7 @@ function AppContent() {
           onSignIn={() => setAuthModalOpen(true)}
           onReportBug={() => setBugReportOpen(true)}
           hasUnreadNews={hasUnreadNews}
+          hasRulesUpdate={hasRulesUpdate}
         />
       )}
 
@@ -201,6 +246,7 @@ function AppContent() {
                 <RulesPage
                   onBack={() => handleSelectTab('characters')}
                   onSignIn={() => setAuthModalOpen(true)}
+                  hasRulesUpdate={hasRulesUpdate}
                   embedded
                 />
               )}
