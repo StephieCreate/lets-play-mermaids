@@ -13,6 +13,7 @@ interface ChatMessage {
   content: string;
   sources?: SourceChip[];
   usedCharacters?: boolean;
+  characterNames?: string[];
 }
 
 const SESSION_KEY = 'rules_helper_chat_session_v1';
@@ -188,7 +189,8 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [includeCharacters, setIncludeCharacters] = useState(false);
+  const [selectedCharacterId, setSelectedCharacterId] = useState('');
+  const [savedCharacters, setSavedCharacters] = useState<Array<{ id: string; name: string }>>([]);
   const [showQuickPrompts, setShowQuickPrompts] = useState(false);
   const [modelLabel, setModelLabel] = useState('');
 
@@ -222,6 +224,28 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
     };
   }, [user]);
 
+  // Populate the Character Context picker with the player's saved characters
+  useEffect(() => {
+    if (!user) {
+      setSavedCharacters([]);
+      setSelectedCharacterId('');
+      return;
+    }
+    let cancelled = false;
+    supabase
+      .from('characters')
+      .select('id, name')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        if (cancelled) return;
+        setSavedCharacters(((data ?? []) as Array<{ id: string; name: string }>).filter((c) => c.name));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
   const clearChat = () => {
     setMessages([]);
     setError(null);
@@ -230,7 +254,7 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
   };
 
   const sendMessage = useCallback(
-    async (history: ChatMessage[], rawMessage: string, charsIncluded: boolean) => {
+    async (history: ChatMessage[], rawMessage: string, characterId: string) => {
       setSending(true);
       setError(null);
       try {
@@ -263,7 +287,7 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
           body: JSON.stringify({
             message: rawMessage,
             history: history.slice(-MAX_HISTORY).map((m) => ({ role: m.role, content: m.content })),
-            includeCharacters: charsIncluded,
+            selectedCharacterIds: characterId ? [characterId] : [],
             requestType,
             aiModel,
           }),
@@ -283,6 +307,9 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
             content: data.reply,
             sources: Array.isArray(data.sources) ? data.sources : [],
             usedCharacters: Boolean(data.usedCharacters),
+            characterNames: Array.isArray(data.characterNames)
+              ? (data.characterNames as unknown[]).filter((n): n is string => typeof n === 'string')
+              : [],
           },
         ]);
       } catch (err) {
@@ -305,14 +332,14 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
     setMessages(nextHistory);
     setInput('');
     if (inputRef.current) inputRef.current.style.height = 'auto';
-    void sendMessage(nextHistory, text, includeCharacters);
+    void sendMessage(nextHistory, text, selectedCharacterId);
   };
 
   const handleChip = (chip: string) => {
     if (sending) return;
     const nextHistory = [...messages, { role: 'user' as const, content: chip }];
     setMessages(nextHistory);
-    void sendMessage(nextHistory, chip, includeCharacters);
+    void sendMessage(nextHistory, chip, selectedCharacterId);
   };
 
   const autoGrowInput = () => {
@@ -416,11 +443,18 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
               ) : (
                 <>
                   <AssistantMarkdown content={message.content} />
-                  {message.usedCharacters && (
+                  {(message.characterNames?.length ?? 0) > 0 ? (
                     <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-foam-400/30 bg-foam-900/25 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-foam-200">
                       <Users className="h-3 w-3" />
-                      Your characters
+                      Character: {message.characterNames!.join(', ')}
                     </span>
+                  ) : (
+                    message.usedCharacters && (
+                      <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-foam-400/30 bg-foam-900/25 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-foam-200">
+                        <Users className="h-3 w-3" />
+                        Your characters
+                      </span>
+                    )
                   )}
                   {message.sources && message.sources.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1.5 border-t border-abyss-700/30 pt-2">
@@ -488,15 +522,36 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
         )}
       </div>
 
-      <label className="mt-2 inline-flex w-fit cursor-pointer items-center gap-2 text-xs text-muted">
-        <input
-          type="checkbox"
-          checked={includeCharacters}
-          onChange={(e) => setIncludeCharacters(e.target.checked)}
-          className="h-4 w-4 accent-foam-400"
-        />
-        Include My Characters
-      </label>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <label
+          htmlFor="character-context"
+          className="shrink-0 text-xs font-medium text-muted"
+        >
+          Character Context
+        </label>
+        <select
+          id="character-context"
+          value={selectedCharacterId}
+          onChange={(e) => setSelectedCharacterId(e.target.value)}
+          disabled={savedCharacters.length === 0}
+          className="min-h-9 max-w-[16rem] rounded-lg border border-abyss-600/40 bg-abyss-950/60 px-2.5 py-1.5 text-xs text-pearl outline-none transition-colors focus:border-abyss-400/60 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {savedCharacters.length === 0 ? (
+            <option value="">No saved characters</option>
+          ) : (
+            <>
+              <option value="" className="bg-abyss-900 text-pearl">
+                No character attached (Rules only)
+              </option>
+              {savedCharacters.map((character) => (
+                <option key={character.id} value={character.id} className="bg-abyss-900 text-pearl">
+                  {character.name}
+                </option>
+              ))}
+            </>
+          )}
+        </select>
+      </div>
 
       <div className="mt-2 flex items-end gap-2">
         <textarea

@@ -54,6 +54,7 @@ interface HelperRequestBody {
   message?: string;
   history?: HelperMessage[];
   includeCharacters?: boolean;
+  selectedCharacterIds?: string[];
   requestType?: string;
   aiModel?: string;
 }
@@ -476,33 +477,16 @@ Deno.serve(async (req: Request) => {
 
     const extraHelpActive = looksLikeExtraHelp(message, body.requestType);
 
-    // ---- 5. Character lookup ONLY when asked or toggled ----
+    // ---- 5. Character context: explicit picker selection first, name-mention fallback ----
     let charactersBlock = "";
     let usedCharacters = false;
-    const explicitCharacterRequest = body.includeCharacters === true || looksLikeCharacterQuestion(message);
-    let includeCharacters = explicitCharacterRequest;
+    const characterNames: string[] = [];
 
-    if (!includeCharacters && /\b(character|characters|mermaid|merfolk|playthrough|stats|traits)\b/i.test(message)) {
-      const { data: nameRows } = await userClient
-        .from("characters")
-        .select("name")
-        .eq("user_id", userId)
-        .limit(50);
-      if (nameRows?.some((row) => row.name && new RegExp(escapeRegex(row.name as string), "i").test(message))) {
-        includeCharacters = true;
-      }
-    }
-
-    if (includeCharacters) {
-      const { data: characterRows } = await userClient
-        .from("characters")
-        .select("id, name, concept, traits, emoji")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(12);
-
-      const characterBlocks: string[] = [];
-      for (const character of (characterRows ?? []) as Array<Record<string, unknown>>) {
+    const buildCharacterBlocks = async (
+      rows: Array<Record<string, unknown>>,
+    ): Promise<string[]> => {
+      const blocks: string[] = [];
+      for (const character of rows) {
         const { data: playthroughRows } = await userClient
           .from("playthroughs")
           .select("title, apex_target, status, story_state, updated_at")
@@ -522,7 +506,7 @@ Deno.serve(async (req: Request) => {
           .filter(Boolean)
           .join(", ");
 
-        characterBlocks.push(
+        blocks.push(
           [
             `Character: ${character.emoji ? `${character.emoji} ` : ""}${character.name}`,
             character.concept ? `Concept: ${character.concept}` : "",
@@ -535,9 +519,56 @@ Deno.serve(async (req: Request) => {
             .join("\n"),
         );
       }
-      if (characterBlocks.length > 0) {
-        charactersBlock = characterBlocks.join("\n\n");
+      return blocks;
+    };
+
+    const selectedIds = Array.isArray(body.selectedCharacterIds)
+      ? body.selectedCharacterIds.filter((id) => typeof id === "string" && /^[0-9a-f-]{36}$/i.test(id)).slice(0, 10)
+      : [];
+
+    if (selectedIds.length > 0) {
+      // Explicit picker selection: inject ONLY those characters, strictly scoped to the caller
+      const { data: selectedRows } = await userClient
+        .from("characters")
+        .select("id, name, concept, traits, emoji")
+        .eq("user_id", userId)
+        .in("id", selectedIds)
+        .order("created_at", { ascending: false });
+
+      const blocks = await buildCharacterBlocks((selectedRows ?? []) as Array<Record<string, unknown>>);
+      if (blocks.length > 0) {
+        charactersBlock = blocks.join("\n\n");
         usedCharacters = true;
+        for (const row of (selectedRows ?? []) as Array<{ name: string }>) {
+          if (row.name) characterNames.push(row.name);
+        }
+      }
+    } else {
+      // No selection: NEVER dump all characters. Inject one ONLY if the player
+      // explicitly names it; otherwise leave the block empty.
+      if (looksLikeCharacterQuestion(message) || /\b(character|characters|mermaid|merfolk|playthrough|stats|traits)\b/i.test(message)) {
+        const { data: nameRows } = await userClient
+          .from("characters")
+          .select("id, name")
+          .eq("user_id", userId)
+          .limit(50);
+        const named = (nameRows ?? []).find(
+          (row) => row.name && new RegExp(escapeRegex(row.name as string), "i").test(message),
+        );
+        if (named) {
+          const { data: namedRows } = await userClient
+            .from("characters")
+            .select("id, name, concept, traits, emoji")
+            .eq("user_id", userId)
+            .eq("id", named.id as string)
+            .limit(1);
+          const blocks = await buildCharacterBlocks((namedRows ?? []) as Array<Record<string, unknown>>);
+          if (blocks.length > 0) {
+            charactersBlock = blocks.join("\n\n");
+            usedCharacters = true;
+            if (named.name) characterNames.push(named.name);
+          }
+        }
       }
     }
 
@@ -570,7 +601,11 @@ Deno.serve(async (req: Request) => {
     }
 
     // ---- 7. Build prompt + call provider (10-message sliding window) ----
-    const systemPrompt = buildHelperSystemPrompt(ruleSourcesText, charactersBlock, blankApexOutline, extraHelpActive);
+    let systemPrompt = buildHelperSystemPrompt(ruleSourcesText, charactersBlock, blankApexOutline, extraHelpActive);
+    if (!charactersBlock && looksLikeCharacterQuestion(message)) {
+      systemPrompt +=
+        "\n\nCHARACTER CONTEXT NOTE: The player asked about their character but no character is attached to this question. Answer the rules side of their question, then gently remind them they can pick one of their saved characters from the Character Context dropdown above the chat for personalized advice. Do NOT invent character details.";
+    }
     const chatMessages: HelperMessage[] = [...history, { role: "user", content: message }].slice(-10);
 
     const { text, error: providerError } = await callProvider(
@@ -590,7 +625,7 @@ Deno.serve(async (req: Request) => {
       return json({ error: "The AI returned an empty response. Try again, or check your key in AI Configuration." }, 502);
     }
 
-    return json({ reply: text, sources, usedCharacters });
+    return json({ reply: text, sources, usedCharacters, characterNames });
   } catch (err) {
     console.error("rules-helper error:", err);
     return json({ error: (err as Error).message || "An unexpected error occurred" }, 500);
