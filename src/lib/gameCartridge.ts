@@ -9,6 +9,13 @@ const MAX_TITLE_LENGTH = 200;
 const MAX_SLUG_LENGTH = 100;
 const SENSITIVE_KEYS = new Set(['api_key', 'key', 'secret', 'token', 'password']);
 
+export const INSTALLED_VERSION_KEY = 'mermaids_installed_cartridge_version';
+export const INSTALLED_ID_KEY = 'mermaids_installed_cartridge_id';
+
+export function normalizeVersion(value?: string | null): string {
+  return (value ?? '').trim().replace(/^v/i, '');
+}
+
 export interface CartridgeRule {
   slug: string;
   title: string;

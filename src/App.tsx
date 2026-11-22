@@ -21,10 +21,12 @@ import PasswordUpdateModal from '@/components/PasswordUpdateModal';
 import Toast from '@/components/Toast';
 import NewsPanel, { type NewsPost } from '@/components/NewsPanel';
 import WorldLorePage from '@/components/WorldLorePage';
+import { INSTALLED_VERSION_KEY, normalizeVersion } from '@/lib/gameCartridge';
 
 type SettingsSubTab = 'ai-config' | 'display' | 'account';
 
 const READ_NEWS_STORAGE_KEY = 'mermaids_read_news_ids';
+const NEWS_LAST_READ_KEY = 'mermaids_news_last_read_at';
 
 function loadReadNewsIds(): string[] {
   try {
@@ -34,6 +36,14 @@ function loadReadNewsIds(): string[] {
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
+  }
+}
+
+function loadNewsLastReadAt(): string | null {
+  try {
+    return localStorage.getItem(NEWS_LAST_READ_KEY);
+  } catch {
+    return null;
   }
 }
 
@@ -52,13 +62,18 @@ function AppContent() {
   const [rotationPromptSeen, setRotationPromptSeen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [readNewsIds, setReadNewsIds] = useState<string[]>(loadReadNewsIds);
+  const [newsLastReadAt, setNewsLastReadAt] = useState<string | null>(loadNewsLastReadAt);
   const [newsPosts, setNewsPosts] = useState<NewsPost[]>([]);
   const [newsLoading, setNewsLoading] = useState(true);
   const [newsError, setNewsError] = useState<string | null>(null);
   const [latestStoreVersion, setLatestStoreVersion] = useState<string | null>(null);
   const [installedCartridgeVersion, setInstalledCartridgeVersion] = useState<string | null>(null);
 
-  const hasUnreadNews = newsPosts.some((post) => !readNewsIds.includes(post.id));
+  const hasUnreadNews = newsPosts.some(
+    (post) =>
+      !readNewsIds.includes(post.id) &&
+      (!newsLastReadAt || new Date(post.created_at).getTime() > new Date(newsLastReadAt).getTime()),
+  );
 
   const fetchNewsPosts = useCallback(async () => {
     setNewsLoading(true);
@@ -91,7 +106,7 @@ function AppContent() {
       .maybeSingle();
     setLatestStoreVersion((data?.version as string | undefined) ?? null);
     try {
-      setInstalledCartridgeVersion(localStorage.getItem('mermaids_installed_cartridge_version'));
+      setInstalledCartridgeVersion(localStorage.getItem(INSTALLED_VERSION_KEY));
     } catch {
       setInstalledCartridgeVersion(null);
     }
@@ -101,13 +116,28 @@ function AppContent() {
     void fetchCartridgeStatus();
   }, [fetchCartridgeStatus, user?.id]);
 
-  // Prefer the account-synced installed version over the local one on sign-in
+  // Prefer the newer of account-synced and local installed versions — a stale
+  // older value must never regress the other source of truth.
   useEffect(() => {
     const meta = user?.user_metadata?.installed_cartridge_version;
-    if (typeof meta === 'string' && meta) {
-      setInstalledCartridgeVersion(meta);
+    if (typeof meta !== 'string' || !normalizeVersion(meta)) return;
+    const metaSegments = normalizeVersion(meta).split('.').map((part) => parseInt(part, 10) || 0);
+    const localSegments = normalizeVersion(installedCartridgeVersion)
+      .split('.')
+      .map((part) => parseInt(part, 10) || 0);
+    const len = Math.max(metaSegments.length, localSegments.length);
+    let metaNewerOrEqual = true;
+    for (let i = 0; i < len; i++) {
+      const diff = (metaSegments[i] ?? 0) - (localSegments[i] ?? 0);
+      if (diff !== 0) {
+        metaNewerOrEqual = diff > 0;
+        break;
+      }
     }
-  }, [user]);
+    if (metaNewerOrEqual) {
+      setInstalledCartridgeVersion(normalizeVersion(meta));
+    }
+  }, [user, installedCartridgeVersion]);
 
   // Clear/update the Rules badge the instant a cartridge is installed or published
   useEffect(() => {
@@ -119,7 +149,7 @@ function AppContent() {
   }, [fetchCartridgeStatus]);
 
   const hasRulesUpdate = Boolean(
-    user && latestStoreVersion && latestStoreVersion !== installedCartridgeVersion
+    user && latestStoreVersion && normalizeVersion(latestStoreVersion) !== normalizeVersion(installedCartridgeVersion)
   );
 
   // Merge locally-stored read IDs with the account's synced list on sign-in
@@ -140,6 +170,24 @@ function AppContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
+  // Watermark sync: take the NEWER of account metadata vs. localStorage so a
+  // sign-in can never regress the read-all state to an older timestamp.
+  useEffect(() => {
+    if (!user) return;
+    const meta = user?.user_metadata?.last_read_news_at;
+    const metaTime = typeof meta === 'string' && meta ? new Date(meta).getTime() : 0;
+    const localTime = newsLastReadAt ? new Date(newsLastReadAt).getTime() : 0;
+    if (Number.isNaN(metaTime) ? false : metaTime > localTime) {
+      setNewsLastReadAt(meta);
+      try {
+        localStorage.setItem(NEWS_LAST_READ_KEY, meta);
+      } catch {
+        // localStorage unavailable; state still applied for this session
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
   const persistReadIds = (next: string[]) => {
     localStorage.setItem(READ_NEWS_STORAGE_KEY, JSON.stringify(next));
     setReadNewsIds(next);
@@ -148,18 +196,50 @@ function AppContent() {
     }
   };
 
+  const persistNewsLastReadAt = (timestamp: string) => {
+    setNewsLastReadAt(timestamp);
+    try {
+      localStorage.setItem(NEWS_LAST_READ_KEY, timestamp);
+    } catch {
+      // localStorage unavailable; state still applied for this session
+    }
+    if (user) {
+      void supabase.auth.updateUser({ data: { last_read_news_at: timestamp } });
+    }
+  };
+
   const markNewsRead = useCallback((id: string) => {
     setReadNewsIds((prev) => {
       if (prev.includes(id)) return prev;
       const next = [...prev, id];
       persistReadIds(next);
+      // Reading the final unread post counts as read-all: stamp the watermark
+      if (
+        newsPosts.length > 0 &&
+        newsPosts.every((post) => next.includes(post.id))
+      ) {
+        const newest = newsPosts.reduce<string>(
+          (max, post) => (post.created_at > max ? post.created_at : max),
+          newsPosts[0].created_at,
+        );
+        persistNewsLastReadAt(new Date(new Date(newest).getTime() + 1000).toISOString());
+      }
       return next;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user, newsPosts]);
 
   const markAllNewsRead = useCallback(() => {
     persistReadIds(newsPosts.map((p) => p.id));
+    // Watermark at newest post + 1s so server clock skew never re-flags it
+    const newest = newsPosts.reduce<string | null>(
+      (max, post) => (max === null || post.created_at > max ? post.created_at : max),
+      null,
+    );
+    if (newest) {
+      const stamp = new Date(new Date(newest).getTime() + 1000).toISOString();
+      persistNewsLastReadAt(stamp);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, newsPosts]);
 

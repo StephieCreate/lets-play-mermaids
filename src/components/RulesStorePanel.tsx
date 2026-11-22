@@ -10,8 +10,10 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import {
+  INSTALLED_VERSION_KEY,
   MAX_CARTRIDGE_BYTES,
   exportCartridge,
+  normalizeVersion,
   parseCartridge,
   type CartridgeRule,
 } from '@/lib/gameCartridge';
@@ -31,11 +33,11 @@ interface StoreCartridge {
   uploaded_at: string;
 }
 
-const INSTALLED_VERSION_KEY = 'mermaids_installed_cartridge_version';
 
 function readStoredInstalledVersion(): string | null {
   try {
-    return localStorage.getItem(INSTALLED_VERSION_KEY);
+    const raw = localStorage.getItem(INSTALLED_VERSION_KEY);
+    return raw ? normalizeVersion(raw) || null : null;
   } catch {
     return null;
   }
@@ -138,15 +140,35 @@ export default function RulesStorePanel({ onRulesInstalled, onSignIn }: RulesSto
     }
   }, [user?.id, fetchCartridges]);
 
-  // Prefer the account-synced installed version over the local one on sign-in
+  // Prefer the newer of account-synced and local installed versions — a stale
+  // older value must never regress the other source of truth.
   useEffect(() => {
     if (!user) return;
     const meta = user.user_metadata?.installed_cartridge_version;
-    if (typeof meta === 'string' && meta && meta !== installedVersion) {
-      setInstalledVersion(meta);
-      localStorage.setItem(INSTALLED_VERSION_KEY, meta);
+    if (typeof meta !== 'string' || !normalizeVersion(meta)) return;
+    const metaVersion = normalizeVersion(meta);
+    const localVersion = normalizeVersion(installedVersion);
+    const metaSegments = metaVersion.split('.').map((part) => parseInt(part, 10) || 0);
+    const localSegments = localVersion.split('.').map((part) => parseInt(part, 10) || 0);
+    const len = Math.max(metaSegments.length, localSegments.length);
+    let metaNewerOrEqual = true;
+    for (let i = 0; i < len; i++) {
+      const diff = (metaSegments[i] ?? 0) - (localSegments[i] ?? 0);
+      if (diff !== 0) {
+        metaNewerOrEqual = diff > 0;
+        break;
+      }
     }
-  }, [user?.id, installedVersion, user]);
+    if (metaNewerOrEqual && metaVersion !== localVersion) {
+      setInstalledVersion(metaVersion);
+      try {
+        localStorage.setItem(INSTALLED_VERSION_KEY, metaVersion);
+      } catch {
+        // localStorage unavailable; state still applied for this session
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   // Pre-fill the admin export version with the next minor bump
   useEffect(() => {
@@ -155,11 +177,21 @@ export default function RulesStorePanel({ onRulesInstalled, onSignIn }: RulesSto
     }
   }, [isAdmin, latestVersion, adminVersion]);
 
-  const persistInstalledVersion = (version: string) => {
-    localStorage.setItem(INSTALLED_VERSION_KEY, version);
-    setInstalledVersion(version);
+  const persistInstalledVersion = async (version: string, cartridgeId?: string) => {
+    const normalized = normalizeVersion(version);
+    try {
+      localStorage.setItem(INSTALLED_VERSION_KEY, normalized);
+    } catch {
+      // localStorage unavailable; state + metadata still applied
+    }
+    setInstalledVersion(normalized);
     if (user) {
-      void supabase.auth.updateUser({ data: { installed_cartridge_version: version } });
+      await supabase.auth.updateUser({
+        data: {
+          installed_cartridge_version: normalized,
+          ...(cartridgeId ? { installed_cartridge_id: cartridgeId } : {}),
+        },
+      });
     }
   };
 
@@ -184,8 +216,12 @@ export default function RulesStorePanel({ onRulesInstalled, onSignIn }: RulesSto
       setStoreError('The cartridge response was invalid. Please try again.');
       return;
     }
+    if (!activeCartridge) return;
     onRulesInstalled(result.rules);
-    persistInstalledVersion(result.version);
+    // Read from the active cartridge row first; fall back to the RPC result
+    const version = activeCartridge.version || result.version;
+    await persistInstalledVersion(version, activeCartridge.id);
+    // Dispatch AFTER saving so App.tsx re-reads the persisted value
     window.dispatchEvent(new Event('mermaids_cartridge_updated'));
   };
 
