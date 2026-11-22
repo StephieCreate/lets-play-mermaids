@@ -35,7 +35,7 @@ const PRIMARY_TABS: { id: Exclude<AppTab, 'settings'>; label: string; icon: type
   { id: 'rules', label: 'Rules', icon: BookOpen },
   { id: 'custom-apex', label: 'Custom Apex', icon: PenLine },
   { id: 'world-lore', label: 'World Lore', icon: Compass },
-  { id: 'news', label: 'News', icon: Sparkles },
+  { id: 'news', label: 'Whispers', icon: Sparkles },
 ];
 
 export default function Header({

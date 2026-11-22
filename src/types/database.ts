@@ -55,3 +55,14 @@ export interface PlaythroughNote {
   created_at: string;
   updated_at: string;
 }
+
+export interface NewsPost {
+  id: string;
+  slug: string | null;
+  phase: string;
+  title: string;
+  content: string;
+  created_at: string;
+  created_by: string | null;
+  author_name?: string | null;
+}

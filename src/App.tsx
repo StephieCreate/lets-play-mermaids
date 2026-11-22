@@ -80,7 +80,7 @@ function AppContent() {
     setNewsError(null);
     const { data, error: fetchError } = await supabase
       .from('news_posts')
-      .select('id, slug, phase, title, content, created_at, created_by')
+      .select('id, slug, phase, title, content, created_at, created_by, author_name')
       .order('created_at', { ascending: false });
     if (fetchError) {
       console.error('Failed to load news posts', fetchError);
