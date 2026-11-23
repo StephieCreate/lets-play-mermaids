@@ -1,5 +1,7 @@
 import { useRef, useState, type ChangeEvent } from 'react';
 import { Download, Loader2, Upload } from 'lucide-react';
+import { exportFile } from '@/utils/exportFile';
+import MobileExportModal from '@/components/MobileExportModal';
 import {
   MAX_CARTRIDGE_BYTES,
   exportCartridge,
@@ -26,45 +28,6 @@ function readFileAsText(file: File): Promise<string> {
   });
 }
 
-type Delivery = 'shared' | 'cancelled' | 'downloaded';
-
-async function downloadJson(json: string, filename: string): Promise<Delivery> {
-  const blob = new Blob([json], { type: 'application/json' });
-  const file = new File([blob], filename, { type: 'application/json' });
-
-  let canShareFiles = false;
-  try {
-    canShareFiles =
-      typeof navigator.share === 'function' &&
-      typeof navigator.canShare === 'function' &&
-      navigator.canShare({ files: [file] });
-  } catch {
-    canShareFiles = false;
-  }
-
-  if (canShareFiles) {
-    try {
-      await navigator.share({ files: [file], title: filename });
-      return 'shared';
-    } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        return 'cancelled';
-      }
-    }
-  }
-
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.rel = 'noopener';
-  document.body.append(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  return 'downloaded';
-}
-
 function plural(count: number, word: string): string {
   return `${count} ${word}${count === 1 ? '' : 's'}`;
 }
@@ -74,22 +37,23 @@ export default function GameCartridgeControls({ userId, onRulesImported }: GameC
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [status, setStatus] = useState<Status>(null);
+  const [pendingExport, setPendingExport] = useState<{ filename: string; content: string; mimeType: string } | null>(null);
 
   const handleExport = async () => {
     setExporting(true);
     setStatus(null);
     try {
       const json = await exportCartridge();
-      const delivery = await downloadJson(json, CARTRIDGE_FILENAME);
-      setStatus({
-        tone: 'success',
-        message:
-          delivery === 'shared'
-            ? 'Your game cartridge is ready. Choose where to save it.'
-            : delivery === 'cancelled'
-              ? 'Export cancelled.'
-              : 'Your game cartridge has been downloaded.',
-      });
+      const result = await exportFile({ filename: CARTRIDGE_FILENAME, content: json, mimeType: 'application/json' });
+      if (result.status === 'needs-manual-modal') {
+        setPendingExport({ filename: result.filename, content: result.content, mimeType: result.mimeType });
+      } else if (result.status === 'shared') {
+        setStatus({ tone: 'success', message: 'Your game cartridge is ready. Choose where to save it.' });
+      } else if (result.status === 'cancelled') {
+        setStatus({ tone: 'success', message: 'Export cancelled.' });
+      } else {
+        setStatus({ tone: 'success', message: 'Your game cartridge has been downloaded.' });
+      }
     } catch (err) {
       console.error('Cartridge export failed', err);
       setStatus({
@@ -166,13 +130,20 @@ export default function GameCartridgeControls({ userId, onRulesImported }: GameC
         <input
           ref={fileInputRef}
           type="file"
-          accept=".json"
+          accept=".json,.md,.txt,text/plain,text/markdown,application/json"
           onChange={handleFileChange}
           className="hidden"
           aria-hidden="true"
           tabIndex={-1}
         />
       </div>
+      <MobileExportModal
+        open={pendingExport !== null}
+        filename={pendingExport?.filename ?? ''}
+        content={pendingExport?.content ?? ''}
+        mimeType={pendingExport?.mimeType ?? 'application/json'}
+        onClose={() => setPendingExport(null)}
+      />
       {status && (
         <p
           role="status"

@@ -18,6 +18,8 @@ import {
   type CartridgeRule,
 } from '@/lib/gameCartridge';
 import GameCartridgeControls from '@/components/GameCartridgeControls';
+import { exportFile } from '@/utils/exportFile';
+import MobileExportModal from '@/components/MobileExportModal';
 
 interface RulesStorePanelProps {
   onRulesInstalled: (rules: CartridgeRule[]) => void;
@@ -77,17 +79,8 @@ function readFileAsText(file: File): Promise<string> {
   });
 }
 
-function downloadJson(json: string, filename: string): void {
-  const blob = new Blob([json], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.rel = 'noopener';
-  document.body.append(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+function plural(count: number, word: string): string {
+  return `${count} ${word}${count === 1 ? '' : 's'}`;
 }
 
 export default function RulesStorePanel({ onRulesInstalled, onSignIn }: RulesStorePanelProps) {
@@ -108,6 +101,7 @@ export default function RulesStorePanel({ onRulesInstalled, onSignIn }: RulesSto
   const adminImportInputRef = useRef<HTMLInputElement>(null);
 
   const [showSupport, setShowSupport] = useState(false);
+  const [pendingExport, setPendingExport] = useState<{ filename: string; content: string; mimeType: string } | null>(null);
 
   const fetchCartridges = useCallback(async () => {
     setStoreLoading(true);
@@ -227,7 +221,15 @@ export default function RulesStorePanel({ onRulesInstalled, onSignIn }: RulesSto
 
   const handleDownload = () => {
     if (!activeCartridge) return;
-    downloadJson(JSON.stringify(activeCartridge.payload, null, 2), activeCartridge.filename);
+    void exportFile({
+      filename: activeCartridge.filename,
+      content: JSON.stringify(activeCartridge.payload, null, 2),
+      mimeType: 'application/json',
+    }).then((result) => {
+      if (result.status === 'needs-manual-modal') {
+        setPendingExport({ filename: result.filename, content: result.content, mimeType: result.mimeType });
+      }
+    });
   };
 
   const handleAdminExport = async () => {
@@ -245,7 +247,15 @@ export default function RulesStorePanel({ onRulesInstalled, onSignIn }: RulesSto
         exportedAt: new Date().toISOString(),
         rules: parsed.rules,
       };
-      downloadJson(JSON.stringify(payload, null, 2), `dark-ocean-rules-v${version}.json`);
+      const exportFilename = `dark-ocean-rules-v${version}.json`;
+      const result = await exportFile({
+        filename: exportFilename,
+        content: JSON.stringify(payload, null, 2),
+        mimeType: 'application/json',
+      });
+      if (result.status === 'needs-manual-modal') {
+        setPendingExport({ filename: result.filename, content: result.content, mimeType: result.mimeType });
+      }
       const includesEngine = parsed.rules.some((rule) => rule.slug === 'universal-core-engine');
       setAdminNotice({
         text: `Exported ${parsed.rules.length} rules — ${includesEngine ? 'includes Universal Core Engine' : 'WARNING: Universal Core Engine missing'}`,
@@ -291,11 +301,9 @@ export default function RulesStorePanel({ onRulesInstalled, onSignIn }: RulesSto
         exportedAt: new Date().toISOString(),
         rules: parsed.rules,
       };
-      const filename = `dark-ocean-rules-v${version}.json`;
-
       const { error } = await supabase.rpc('publish_store_cartridge', {
         p_version: version,
-        p_filename: filename,
+        p_filename: `dark-ocean-rules-v${version}.json`,
         p_payload: payload,
       });
       if (error) throw error;
@@ -502,7 +510,7 @@ export default function RulesStorePanel({ onRulesInstalled, onSignIn }: RulesSto
                 <input
                   ref={uploadInputRef}
                   type="file"
-                  accept=".json"
+                  accept=".json,.md,.txt,text/plain,text/markdown,application/json"
                   onChange={handleUploadChange}
                   className="hidden"
                   aria-hidden="true"
@@ -552,6 +560,14 @@ export default function RulesStorePanel({ onRulesInstalled, onSignIn }: RulesSto
           </div>
         </div>
       )}
+
+      <MobileExportModal
+        open={pendingExport !== null}
+        filename={pendingExport?.filename ?? ''}
+        content={pendingExport?.content ?? ''}
+        mimeType={pendingExport?.mimeType ?? 'application/json'}
+        onClose={() => setPendingExport(null)}
+      />
     </section>
   );
 }

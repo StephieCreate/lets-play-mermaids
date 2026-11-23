@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { PenLine, Plus, Pencil, Trash2, Loader2, LockKeyhole, AlertCircle, Download, CheckSquare, Square } from 'lucide-react';
+import { exportFile } from '@/utils/exportFile';
+import MobileExportModal from '@/components/MobileExportModal';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { listCustomApexes } from '@/lib/customApexes';
@@ -22,6 +24,7 @@ export default function CustomApexPanel({ onSignIn }: CustomApexPanelProps) {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState(false);
+  const [pendingExport, setPendingExport] = useState<{ filename: string; content: string; mimeType: string } | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -79,7 +82,7 @@ export default function CustomApexPanel({ onSignIn }: CustomApexPanelProps) {
     });
   };
 
-  const exportApexesToJson = (selected: UserCustomApex[]) => {
+  const exportApexesToJson = async (selected: UserCustomApex[]) => {
     const payload = {
       format: 'mermaids-custom-apexes',
       exportedAt: new Date().toISOString(),
@@ -89,30 +92,26 @@ export default function CustomApexPanel({ onSignIn }: CustomApexPanelProps) {
         createdAt: apex.created_at,
       })),
     };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'my-custom-apexes.json';
-    link.rel = 'noopener';
-    document.body.append(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    const result = await exportFile({
+      filename: 'my-custom-apexes.json',
+      content: JSON.stringify(payload, null, 2),
+      mimeType: 'application/json',
+    });
+    if (result.status === 'needs-manual-modal') {
+      setPendingExport({ filename: result.filename, content: result.content, mimeType: result.mimeType });
+    }
   };
 
   const handleExportAll = () => {
     if (exporting || apexes.length === 0) return;
     setExporting(true);
-    exportApexesToJson(apexes);
-    setExporting(false);
+    void exportApexesToJson(apexes).finally(() => setExporting(false));
   };
 
   const handleExportSelected = () => {
     if (exporting || selectedIds.size === 0) return;
     setExporting(true);
-    exportApexesToJson(apexes.filter((a) => selectedIds.has(a.id)));
-    setExporting(false);
+    void exportApexesToJson(apexes.filter((a) => selectedIds.has(a.id))).finally(() => setExporting(false));
   };
 
   if (!user) {
@@ -291,6 +290,14 @@ export default function CustomApexPanel({ onSignIn }: CustomApexPanelProps) {
         apex={editing}
         onClose={() => setEditorOpen(false)}
         onSaved={handleSaved}
+      />
+
+      <MobileExportModal
+        open={pendingExport !== null}
+        filename={pendingExport?.filename ?? ''}
+        content={pendingExport?.content ?? ''}
+        mimeType={pendingExport?.mimeType ?? 'application/json'}
+        onClose={() => setPendingExport(null)}
       />
     </div>
   );
