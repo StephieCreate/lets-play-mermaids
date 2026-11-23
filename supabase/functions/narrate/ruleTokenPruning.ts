@@ -229,9 +229,13 @@ export function pruneRulesByPlayerState(
     }
   }
 
-  // 3. The 3-Day Mating Season Heat (gated until Bond >= 15 or active pregnancy)
-  if (frozen.bondLevel < 15 && !frozen.hasOffspringInSave) {
-    pruned = stripMarkdownSection(pruned, 'THE "SEASON" (Mating Biology)');
+  // 3. Fertility Window & Offspring Checks (strictly Bond 18+ or active pregnancy;
+  // Offering & Pacing + Unmated Frenzy stay active in Zone 1 for Year 1 / Low Bond!)
+  if (frozen.bondLevel < 18 && !frozen.hasOffspringInSave) {
+    pruned = stripMarkdownSection(
+      pruned,
+      "[SYSTEM_MECHANIC: FERTILITY WINDOW & OFFSPRING CHECKS]",
+    );
   }
 
   // 4. Starter Pod Rules (strip once started if player has no Starter Pod)
@@ -288,6 +292,10 @@ export function pruneRulesByPlayerState(
     pruned = stripMarkdownSection(
       pruned,
       "[SYSTEM_RULE]: THE APEX-PRESENT PROTECTION",
+    );
+    pruned = stripMarkdownSection(
+      pruned,
+      "[SYSTEM_MODULE]: 15.6 APEX ADVENTURE BEATS",
     );
     pruned = stripMarkdownSection(
       pruned,
@@ -451,10 +459,7 @@ export function getDynamicTurnRules(
         `${frozen.saveLog}\n${twoWayRadar}`,
       )
     ) {
-      const cultivars = extractMarkdownSection(
-        rawAlgae,
-        "The Fallen Medics' Legacy: Rare Graveyard Cultivars",
-      );
+      const cultivars = extractGraveyardCultivarsOnly(rawAlgae);
       if (cultivars) dynamicSnippets.push(cultivars);
     }
 
@@ -481,7 +486,7 @@ export function getDynamicTurnRules(
     if (
       frozen.bondLevel < 18 &&
       !frozen.hasOffspringInSave &&
-      /\b(conceive|conception|adopt a pup|adoption|catalyst quest|pregnant|pregnancy)\b/i.test(
+      /\b(conceive|conception|offspring check|fertility window|adopt a pup|adoption|catalyst quest|pregnant|pregnancy)\b/i.test(
         twoWayRadar,
       )
     ) {
@@ -490,15 +495,12 @@ export function getDynamicTurnRules(
         "[SYSTEM_MECHANIC: REPRODUCTION & RAISING CHILDREN]",
       );
       if (repro) dynamicSnippets.push(scrubInactiveApexNames(repro, frozen.apexTarget));
-    }
 
-    if (
-      frozen.bondLevel < 15 &&
-      !frozen.hasOffspringInSave &&
-      /\b(mating season|frenzy|three-day cycle)\b/i.test(twoWayRadar)
-    ) {
-      const matingHeat = extractMarkdownSection(rawCore, 'THE "SEASON" (Mating Biology)');
-      if (matingHeat) dynamicSnippets.push(scrubInactiveApexNames(matingHeat, frozen.apexTarget));
+      const fertility = extractMarkdownSection(
+        rawCore,
+        "[SYSTEM_MECHANIC: FERTILITY WINDOW & OFFSPRING CHECKS]",
+      );
+      if (fertility) dynamicSnippets.push(scrubInactiveApexNames(fertility, frozen.apexTarget));
     }
   }
 
@@ -617,20 +619,16 @@ function cleanTemplateConditionals(text: string, frozen: DayFrozenState): string
 
 /**
  * ZONE 1 FOR "medicinal-algae-quick-reference":
- * Stays 100% frozen all day so the Base Algae Table, Apothecary Prep, Analgesics,
- * Deep-Ocean Anomalies, and Season-Filtered Environmental Flavor are cached cheaply!
- * Only hard-prunes Endocrine (until Bond 15+) and Graveyard Cultivars (for non-medics).
+ * Stays 100% frozen all day so Base Algae, Apothecary Prep, and Analgesics
+ * are cached cheaply. Hard-prunes Endocrine (until Bond 15+) and Graveyard
+ * Cultivars (for non-Medics) without letting ## swallow ### Endocrine!
  */
 function pruneMedicinalAlgaeZone1(text: string, frozen: DayFrozenState): string {
   if (!frozen.hasStartedGame) {
     return "";
   }
 
-  const envFlavorHeader = "# [SYSTEM_MODULE: ENVIRONMENTAL FLAVOR EXPANSION]";
-  const splitIndex = text.indexOf(envFlavorHeader);
-
-  let medicalPart = splitIndex !== -1 ? text.slice(0, splitIndex) : text;
-  let envFlavorPart = splitIndex !== -1 ? text.slice(splitIndex) : "";
+  let medicalPart = text;
 
   // Hard anti-bleed lock: hide Endocrine / Mating Heat brew until Bond 15+
   if (frozen.bondLevel < 15) {
@@ -641,26 +639,24 @@ function pruneMedicinalAlgaeZone1(text: string, frozen: DayFrozenState): string 
   }
 
   // Hide rare Graveyard Cultivars in Zone 1 unless player is a Medic/Healer
-  // (Zone 2 injects it on demand if a non-medic suffers severe infection/rot or transplants)
+  // (Uses boundary-safe strip so ### Endocrine right below it is NEVER swallowed!)
   if (!frozen.isMedicCharacter) {
-    medicalPart = stripMarkdownSection(
-      medicalPart,
-      "The Fallen Medics' Legacy: Rare Graveyard Cultivars",
-    );
+    medicalPart = stripGraveyardCultivarsOnly(medicalPart);
   }
 
-  // Filter Environmental Flavor Section 8 to ONLY the current Season (day-frozen!)
-  if (envFlavorPart) {
-    const otherSeasons = ["Spring", "Summer", "Fall", "Winter"].filter(
-      (s) => s.toLowerCase() !== frozen.season,
-    );
-    for (const otherSeason of otherSeasons) {
-      const rowRegex = new RegExp(`\\n\\|\\s*${otherSeason}\\s+[^\\n]+`, "gi");
-      envFlavorPart = envFlavorPart.replace(rowRegex, "");
-    }
-  }
+  return medicalPart.replace(/\n{3,}/g, "\n\n").trim();
+}
 
-  return `${medicalPart}\n\n${envFlavorPart}`.replace(/\n{3,}/g, "\n\n").trim();
+const GRAVEYARD_CULTIVARS_REGEX =
+  /(?:^|\n)(##\s+[^\n]*The Fallen Medics' Legacy: Rare Graveyard Cultivars[\s\S]*?)(?=\n#{2,3}\s+[^\n]*Endocrine & Cognitive Support|\n##\s+|$)/i;
+
+function stripGraveyardCultivarsOnly(text: string): string {
+  return text.replace(GRAVEYARD_CULTIVARS_REGEX, "\n");
+}
+
+function extractGraveyardCultivarsOnly(text: string): string {
+  const match = text.match(GRAVEYARD_CULTIVARS_REGEX);
+  return match ? match[1].trim() : "";
 }
 
 // ============================================================================
@@ -960,9 +956,12 @@ function buildGmQaMissingRulesBundle(
       const repro = extractMarkdownSection(rawCore, "[SYSTEM_MECHANIC: REPRODUCTION & RAISING CHILDREN]");
       if (repro) missing.push(repro);
     }
-    if (frozen.bondLevel < 15 && !frozen.hasOffspringInSave) {
-      const heat = extractMarkdownSection(rawCore, 'THE "SEASON" (Mating Biology)');
-      if (heat) missing.push(heat);
+    if (frozen.bondLevel < 18 && !frozen.hasOffspringInSave) {
+      const fertility = extractMarkdownSection(
+        rawCore,
+        "[SYSTEM_MECHANIC: FERTILITY WINDOW & OFFSPRING CHECKS]",
+      );
+      if (fertility) missing.push(fertility);
     }
     // Include full 4-season weather reference so the GM can answer Winter/Summer/Fall questions
     const allSeasons = [
@@ -990,7 +989,7 @@ function buildGmQaMissingRulesBundle(
       if (endo) missing.push(endo);
     }
     if (!frozen.isMedicCharacter) {
-      const cult = extractMarkdownSection(rawAlgae, "The Fallen Medics' Legacy: Rare Graveyard Cultivars");
+      const cult = extractGraveyardCultivarsOnly(rawAlgae);
       if (cult) missing.push(cult);
     }
   }
