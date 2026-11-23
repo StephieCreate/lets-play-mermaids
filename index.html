@@ -2,6 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      if (window.top === window.self && window.location.hostname.endsWith('.bolt.host')) {
+        window.location.replace(
+          'https://letsplaymermaids.com' + window.location.pathname + window.location.search + window.location.hash
+        );
+      }
+    </script>
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Let's Play Mermaids — A Dark Ocean Survival Romance RPG</title>
@@ -9,10 +16,10 @@
     <link rel="canonical" href="https://letsplaymermaids.com" />
     <meta property="og:url" content="https://letsplaymermaids.com" />
     <meta property="og:site_name" content="Let's Play Mermaids" />
-    <meta property="og:image" content="https://bolt.new/static/og_default.png">
-    <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:image" content="https://bolt.new/static/og_default.png">
-</head>
+    <meta property="og:image" content="https://bolt.new/static/og_default.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://bolt.new/static/og_default.png" />
+  </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
