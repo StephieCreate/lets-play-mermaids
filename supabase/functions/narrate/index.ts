@@ -167,11 +167,16 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Fetch rule documents (all belong to the same owner; service role bypasses RLS).
-    const { data: ruleRows } = await supabase
+    // Fetch rule documents (scoped to the playthrough owner; service role bypasses RLS,
+    // so without this filter rows from OTHER accounts with the same slug clobber this one!)
+    let ruleRowsQuery = supabase
       .from("rule_documents")
       .select("slug, content")
       .in("slug", Array.from(slugs));
+    if (ptRow?.user_id) {
+      ruleRowsQuery = ruleRowsQuery.eq("user_id", ptRow.user_id as string);
+    }
+    const { data: ruleRows } = await ruleRowsQuery;
 
     if (ruleRows) {
       for (const row of ruleRows) {
@@ -367,6 +372,8 @@ Deno.serve(async (req: Request) => {
   for (const [slug, content] of Object.entries(ruleContents)) {
     ruleContents[slug] = pruneRulesByPlayerState(slug, content, pruningCtx);
   }
+
+  console.log(`worldLoreChars: ${ruleContents["lets-play-mermaids-world-lore"]?.length ?? 0}`);
 
   // ZONE 2: Build the Dynamic Turn Tail (empty "" on most normal turns;
   // only populated on Save/Summary/Register, Rival arrival, or GM Q&A!)
