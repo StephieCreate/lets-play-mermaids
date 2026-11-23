@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BookOpenCheck, Check, Copy, Eraser, Layers, Loader2, LockKeyhole, Send, Trash2, Users, X } from 'lucide-react';
+import { BookOpenCheck, Check, Copy, Eraser, Layers, Loader2, LockKeyhole, Send, Square, Trash2, Users, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useFontSettings } from '@/context/FontSettingsContext';
 import { supabase } from '@/lib/supabase';
+import { handleChatKeyDown } from '@/lib/deviceInput';
 
 interface SourceChip {
   docTitle: string;
@@ -266,6 +267,7 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
 
   const feedRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const prevCountRef = useRef(0);
   const userId = user?.id ?? null;
 
@@ -369,9 +371,11 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
   };
 
   const sendMessage = useCallback(
-    async (history: ChatMessage[], rawMessage: string, characterId: string) => {
+    async (history: ChatMessage[], rawMessage: string, characterId: string): Promise<boolean> => {
       setSending(true);
       setError(null);
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
       try {
         const { data: sessionData } = await supabase.auth.getSession();
         const token = sessionData.session?.access_token;
@@ -406,6 +410,7 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
             requestType,
             aiModel,
           }),
+          signal: controller.signal,
         });
 
         const data = await response.json().catch(() => null);
@@ -428,6 +433,9 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
         const savedId = await insertAssistantMessage(user.id, 'assistant', data.reply, assistantMeta);
         setMessages([...history, { ...assistantMeta, id: savedId }]);
       } catch (err) {
+        if (controller.signal.aborted || (err instanceof DOMException && err.name === 'AbortError')) {
+          return true;
+        }
         setError(
           err instanceof Error
             ? err.message
@@ -435,7 +443,9 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
         );
       } finally {
         setSending(false);
+        abortControllerRef.current = null;
       }
+      return false;
     },
     [user],
   );
@@ -453,7 +463,23 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
       if (savedId) {
         setMessages((prev) => prev.map((m) => (m === optimistic ? { ...m, id: savedId } : m)));
       }
-      await sendMessage(nextHistory, text, selectedCharacterId);
+      const aborted = await sendMessage(nextHistory, text, selectedCharacterId);
+      if (aborted) {
+        setInput(text);
+        if (inputRef.current) inputRef.current.style.height = 'auto';
+        setMessages((prev) => {
+          for (let i = prev.length - 1; i >= 0; i--) {
+            if (prev[i].role === 'user' && prev[i].content === text) {
+              const next = prev.slice();
+              next.splice(i, 1);
+              return next;
+            }
+          }
+          return prev;
+        });
+        if (savedId) await deleteAssistantMessage(savedId);
+        window.setTimeout(() => autoGrowInput(), 0);
+      }
     })();
   };
 
@@ -755,25 +781,20 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
               setInput(e.target.value);
               autoGrowInput();
             }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
+            onKeyDown={(e) => handleChatKeyDown(e, handleSend)}
             placeholder="Ask about the rules, your characters, or building Extras..."
             rows={1}
             className="min-h-12 max-h-40 w-full resize-none overflow-y-auto rounded-xl border border-abyss-600/40 bg-abyss-900/60 py-3 pl-4 pr-14 text-sm leading-relaxed text-pearl outline-none placeholder:text-muted/50 focus:border-abyss-400/60"
           />
           <button
             type="button"
-            onClick={handleSend}
-            disabled={sending || !input.trim()}
+            onClick={sending ? () => abortControllerRef.current?.abort() : handleSend}
+            disabled={!sending && !input.trim()}
             className="absolute bottom-2.5 right-2.5 z-10 inline-flex h-7 w-7 items-center justify-center rounded-md text-pearl/70 transition-colors hover:bg-abyss-700/40 hover:text-pearl disabled:cursor-not-allowed disabled:opacity-40"
-            aria-label="Send message"
-            title="Send (Enter)"
+            aria-label={sending ? 'Stop response' : 'Send message'}
+            title={sending ? 'Stop generating' : 'Send (Enter)'}
           >
-            {sending ? <Loader2 className="h-[18px] w-[18px] animate-spin" /> : <Send className="h-[18px] w-[18px]" />}
+            {sending ? <Square className="h-[18px] w-[18px] fill-current" /> : <Send className="h-[18px] w-[18px]" />}
           </button>
         </div>
         <p className="mt-1.5 text-center text-[11px] text-muted/70">Enter to send · Shift+Enter for a new line</p>

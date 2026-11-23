@@ -186,7 +186,72 @@ export function buildTimePassageDirective(
 }
 
 /**
+ * Dialogue Isolation Gate (No Mind-Reading): a turn-level, cache-safe directive
+ * appended ONLY to the outgoing user prompt. Never saved, never in systemPrompt.
+ */
+export function buildDialogueIsolationDirective(rawPlayerInput: string): string {
+  // 1. Strip appended directives and OOC brackets before scanning.
+  let clean = rawPlayerInput
+    .replace(/\n?\[MANDATORY SYSTEM DIRECTIVE[\s\S]*$/i, "")
+    .replace(/\n?\(\(APP_ROLL[^)]*\)\)/gi, "")
+    .replace(/\n?\[WEATHER LOCK[^\]]*\]/gi, "")
+    .replace(/\n?\[STAMINA PENDING[^\]]*\]/gi, "")
+    .replace(/\n?\[TIME CLOCK TELEMETRY[^\]]*\]/gi, "")
+    .replace(/\(\([^()]*\)\)/g, "")
+    .trim();
+  if (clean === "") return "";
+
+  // 2. Pure system/bookkeeping commands carry no roleplay prose to gate.
+  const lower = clean.toLowerCase();
+  const pureCommands = [
+    /^proceed\b/i,
+    /^save( my)? progress\b/i,
+    /^update (the )?register\b/i,
+    /^give me a summary\b/i,
+    /^start (the )?game\b/i,
+    /^load (save |the )?game\b/i,
+    /^i go to sleep\b/i,
+  ];
+  if (pureCommands.some((re) => re.test(clean)) || isSummaryRequest(clean) || isSaveRequest(clean)) {
+    return "";
+  }
+
+  // 3. Extract quoted dialogue; what remains is unquoted prose.
+  const quoteRegex = /["\u201C]([^"\u201D]+)["\u201D]/g;
+  const quoted: string[] = [];
+  for (const m of clean.matchAll(quoteRegex)) {
+    quoted.push(m[1].trim());
+  }
+  const unquotedText = clean.replace(quoteRegex, " ").replace(/\s+/g, " ").trim();
+  if (quoted.length === 0 && unquotedText.length < 15) return "";
+
+  // 4. Explicit summarized speech is the allowed exception (no quotes needed).
+  const hasSummarizedSpeech =
+    /\b(?:i|my character)\s+(?:quickly\s+|quietly\s+|briefly\s+|carefully\s+|slowly\s+)?(?:tell|told|explain|explained|describe|described|recount|recounted|summarize|summarized|inform|informed|mention|mentioned|relay|relayed|share|shared|warn|warned|ask|asked|answer|answered|reply|replied|fill\s+(?:him|her|them)\s+in|let\s+(?:him|her|them)\s+know)\b/i.test(
+      unquotedText,
+    );
+
+  // 5. Case 2 — Mixed Novel POV: quotes present alongside meaningful prose.
+  if (quoted.length > 0 && unquotedText.length >= 15) {
+    const quotedList = quoted
+      .map((q) => (q.length > 120 ? `${q.slice(0, 117)}...` : q))
+      .map((q) => `"${q}"`)
+      .join(" | ");
+    return `[DIALOGUE ISOLATION GATE — MIXED NOVEL POV]: ONLY the text enclosed in quotation marks ("...") was spoken aloud by the player. Spoken this turn: ${quotedList}. Everything outside quotation marks is private internal monologue or physical narration—100% INAUDIBLE to the Primary Mate and all NPCs (except any phrase that explicitly narrates telling/explaining something aloud, e.g., "I tell him what I saw"). NPCs are STRICTLY FORBIDDEN from mind-reading, quoting, or answering unspoken thoughts.`;
+  }
+
+  // 6. Case 1 — Silent / Novel-POV turn.
+  if (quoted.length === 0 && !hasSummarizedSpeech) {
+    return `[DIALOGUE ISOLATION GATE — NO SPOKEN DIALOGUE]: The player used NO quotation marks ("...") and did NOT describe speaking aloud. Treat their entire input as physical action and/or private internal monologue. All unquoted thoughts, memories, feelings, and novel-style narration are 100% INVISIBLE AND INAUDIBLE to the Primary Mate and all NPCs. NPCs are STRICTLY FORBIDDEN from answering, echoing, quoting, or reacting to unspoken thoughts—they may ONLY react to observable physical/sensory cues (posture, distance, gill rhythm, adrenaline scent, actions).`;
+  }
+
+  // 7. Case 3 — Explicit summarized speech.
+  return `[DIALOGUE ISOLATION GATE — SUMMARIZED SPEECH]: The player explicitly described telling/explaining something to an NPC without exact quotation marks. Treat ONLY that explicitly summarized communication as audible speech. All other unquoted internal thoughts, feelings, or novel prose in this message remain strictly private and inaudible (No Mind-Reading).`;
+}
+
+/**
  * Server-Side Math: Calculates the encounter outcome and Effective DC based on the final modified d20 roll.
+
  * The Tier & CR Difficulty Model (Static DCs):
  * CR 1 (Tier 1) = DC 12 | CR 3 = DC 14 | CR 5 (Tier 2) = DC 18
  * CR 10 = DC 22 | CR 15 (Tier 3) = DC 26 | CR 20 = DC 30

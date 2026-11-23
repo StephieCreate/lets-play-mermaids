@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { ArrowLeft, Send, Waves, BookOpen, ScrollText, Home, Sparkles, Box, Loader2, Trash2, AlertTriangle, X, Dices, Sun, Copy, Check, Bug, Minus, Plus, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Send, Waves, BookOpen, ScrollText, Home, Sparkles, Box, Loader2, Trash2, AlertTriangle, X, Dices, Sun, Copy, Check, Bug, Minus, Plus, RefreshCw, Square } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import type { Character, Playthrough } from '@/types/database';
@@ -11,6 +11,7 @@ import ExtrasPanel from '@/components/ExtrasPanel';
 import { useFontSettings } from '@/context/FontSettingsContext';
 import MarkdownNarrative from '@/components/MarkdownNarrative';
 import GrottoRegistry from '@/components/GrottoRegistry';
+import { handleChatKeyDown } from '@/lib/deviceInput';
 
 interface PlayScreenProps {
   playthroughId: string;
@@ -200,6 +201,7 @@ export default function PlayScreen({ playthroughId, onBack, onSignIn, onReportBu
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -463,6 +465,8 @@ export default function PlayScreen({ playthroughId, onBack, onSignIn, onReportBu
     }
     setSending(true);
     setError(null);
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     // Persist the player's message
     const { data: playerRow, error: playerSaveError } = await supabase
@@ -525,6 +529,7 @@ export default function PlayScreen({ playthroughId, onBack, onSignIn, onReportBu
           conversationHistory: messagesRef.current,
           aiModel: chosenModelId,
         }),
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -583,10 +588,23 @@ export default function PlayScreen({ playthroughId, onBack, onSignIn, onReportBu
       narratorMessage.id = narrRow?.id ?? null;
       setMessages((prev) => [...prev, narratorMessage]);
     } catch (err) {
+      if (controller.signal.aborted || (err instanceof DOMException && err.name === 'AbortError')) {
+        // Manual stop: no error banner. Restore the draft and roll back the
+        // optimistic player bubble (and its saved row) so no phantom turn remains.
+        setInput(currentInput);
+        window.setTimeout(() => autoGrow(), 0);
+        setMessages((prev) => prev.filter((m) => !(m.role === 'player' && m.seq === currentSeq)));
+        if (playerRow?.id) {
+          void supabase.from('chat_messages').delete().eq('id', playerRow.id);
+        }
+        setError(null);
+        return;
+      }
       console.error('Narrate error', err);
       setError(err instanceof Error ? err.message : 'The story could not continue. Please try again.');
     } finally {
       setSending(false);
+      abortControllerRef.current = null;
     }
   };
 
@@ -1154,19 +1172,20 @@ export default function PlayScreen({ playthroughId, onBack, onSignIn, onReportBu
                 ref={textareaRef}
                 value={input}
                 onChange={(e) => { setInput(e.target.value); autoGrow(); }}
+                onKeyDown={(e) => handleChatKeyDown(e, handleSend)}
                 placeholder={user ? 'What does your mermaid do?' : 'Sign in to begin playing...'}
                 disabled={sending || !user}
                 rows={1}
                 className="min-h-12 max-h-40 w-full resize-none overflow-y-auto rounded-xl border border-abyss-600/40 bg-abyss-900/60 px-20 py-3 text-sm leading-relaxed text-pearl outline-none placeholder:text-muted/50 focus:border-abyss-400/60 disabled:opacity-50"
               />
               <button
-                onClick={user ? handleSend : onSignIn}
-                disabled={sending || (!user ? false : !input.trim())}
+                onClick={sending ? () => abortControllerRef.current?.abort() : user ? handleSend : onSignIn}
+                disabled={!sending && (user ? !input.trim() : false)}
                 className="absolute right-2.5 bottom-2.5 z-10 inline-flex h-7 w-7 items-center justify-center rounded-md text-pearl/70 transition-colors hover:text-pearl hover:bg-abyss-700/40 disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label="Send"
-                title="Send"
+                aria-label={sending ? 'Stop response' : 'Send'}
+                title={sending ? 'Stop generating' : 'Send'}
               >
-                {sending ? <Loader2 className="h-[18px] w-[18px] animate-spin" /> : <Send className="h-[18px] w-[18px]" />}
+                {sending ? <Square className="h-[18px] w-[18px] fill-current" /> : <Send className="h-[18px] w-[18px]" />}
               </button>
             </div>
             {gentleDay && (

@@ -9,6 +9,7 @@ import {
   MessageSquare,
   ScanLine,
   Send,
+  Square,
   Terminal,
   Trash2,
   X,
@@ -16,6 +17,7 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import { useFontSettings } from '@/context/FontSettingsContext';
 import { supabase } from '@/lib/supabase';
+import { handleChatKeyDown } from '@/lib/deviceInput';
 import MarkdownChat from '@/components/devMode/MarkdownChat';
 import RulePane from '@/components/devMode/RulePane';
 import {
@@ -139,6 +141,7 @@ export default function DevModeStudio() {
 
   const feedRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const prevChatCountRef = useRef(0);
   const userId = user?.id ?? null;
 
@@ -322,9 +325,11 @@ export default function DevModeStudio() {
   };
 
   const sendChat = useCallback(
-    async (history: ChatMessage[], rawInput: string) => {
+    async (history: ChatMessage[], rawInput: string): Promise<boolean> => {
       setChatSending(true);
       setChatError(null);
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
       try {
         const { data: sessionData } = await supabase.auth.getSession();
         const token = sessionData.session?.access_token;
@@ -361,6 +366,7 @@ export default function DevModeStudio() {
             attachedFiles: attachedPayload,
             aiModel: chosenModel,
           }),
+          signal: controller.signal,
         });
 
         const data = await response.json().catch(() => null);
@@ -373,10 +379,15 @@ export default function DevModeStudio() {
         const savedId = await insertChatMessage(user.id, 'assistant', data.reply);
         setChatMessages([...history, { id: savedId, role: 'assistant', content: data.reply }]);
       } catch (err) {
+        if (controller.signal.aborted || (err instanceof DOMException && err.name === 'AbortError')) {
+          return true;
+        }
         setChatError(err instanceof Error ? err.message : 'The Dev Assistant could not respond. Please try again.');
       } finally {
         setChatSending(false);
+        abortControllerRef.current = null;
       }
+      return false;
     },
     [attachedFiles, user],
   );
@@ -394,7 +405,23 @@ export default function DevModeStudio() {
       if (savedId) {
         setChatMessages((prev) => prev.map((m) => (m === optimistic ? { ...m, id: savedId } : m)));
       }
-      await sendChat(nextHistory, text);
+      const aborted = await sendChat(nextHistory, text);
+      if (aborted) {
+        setChatInput(text);
+        if (inputRef.current) inputRef.current.style.height = 'auto';
+        setChatMessages((prev) => {
+          for (let i = prev.length - 1; i >= 0; i--) {
+            if (prev[i].role === 'user' && prev[i].content === text) {
+              const next = prev.slice();
+              next.splice(i, 1);
+              return next;
+            }
+          }
+          return prev;
+        });
+        if (savedId) await deleteChatMessage(savedId);
+        window.setTimeout(() => autoGrowInput(), 0);
+      }
     })();
   };
 
@@ -800,25 +827,20 @@ export default function DevModeStudio() {
                   setChatInput(e.target.value);
                   autoGrowInput();
                 }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend();
-                  }
-                }}
+                onKeyDown={(e) => handleChatKeyDown(e, handleSend)}
                 placeholder="Ask the Dev Assistant anything — Enter to send, Shift+Enter for a new line"
                 rows={1}
                 className="min-h-12 max-h-44 w-full resize-none overflow-y-auto rounded-xl border border-abyss-600/40 bg-abyss-900/60 py-3 pl-4 pr-14 text-sm leading-relaxed text-pearl outline-none placeholder:text-muted/50 focus:border-abyss-400/60"
               />
               <button
                 type="button"
-                onClick={handleSend}
-                disabled={chatSending || !chatInput.trim()}
+                onClick={chatSending ? () => abortControllerRef.current?.abort() : handleSend}
+                disabled={!chatSending && !chatInput.trim()}
                 className="absolute bottom-2.5 right-2.5 z-10 inline-flex h-7 w-7 items-center justify-center rounded-md text-pearl/70 transition-colors hover:bg-abyss-700/40 hover:text-pearl disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label="Send message"
-                title="Send (Enter)"
+                aria-label={chatSending ? 'Stop response' : 'Send message'}
+                title={chatSending ? 'Stop generating' : 'Send (Enter)'}
               >
-                {chatSending ? <Loader2 className="h-[18px] w-[18px] animate-spin" /> : <Send className="h-[18px] w-[18px]" />}
+                {chatSending ? <Square className="h-[18px] w-[18px] fill-current" /> : <Send className="h-[18px] w-[18px]" />}
               </button>
             </div>
           </div>

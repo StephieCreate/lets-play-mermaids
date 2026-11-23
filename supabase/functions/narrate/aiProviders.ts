@@ -37,7 +37,8 @@ export async function callAI(
   baseUrl: string | null,
   systemPrompt: string,
   conversationMessages: Array<{ role: string; content: string }>,
-  requestedModel?: string
+  requestedModel?: string,
+  signal?: AbortSignal,
 ): Promise<{ response: Response | null; providerError: string | null }> {
 
   // Use the specific model requested by the UI, or fallback to the provider's default
@@ -61,6 +62,7 @@ export async function callAI(
         contents,
         generationConfig: { temperature: 0.8, maxOutputTokens: 16192 },
       }),
+      signal,
     });
 
     if (!response.ok) {
@@ -95,6 +97,7 @@ export async function callAI(
         max_tokens: 16000,
         temperature: 0.8,
       }),
+      signal,
     });
 
     if (!response.ok) {
@@ -149,6 +152,7 @@ export async function callAI(
       frequency_penalty: 0.3, // <--- ASSASSINATES REPETITIVE CRUTCH PHRASES
       max_tokens: 16000,
     }),
+    signal,
   });
 
   if (!response.ok) {

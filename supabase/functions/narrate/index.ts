@@ -13,6 +13,7 @@ import {
 import type { NarrateRequest, NarrativeSummaryRow } from "./types.ts";
 import {
   applyCommandInterceptors,
+  buildDialogueIsolationDirective,
   buildTimePassageDirective,
   isSaveRequest,
   isSummaryRequest,
@@ -232,6 +233,15 @@ Deno.serve(async (req: Request) => {
     if (staminaPendingInSaveLog && body.playerInput.includes("The player has typed Proceed")) {
       body.playerInput += `\n\n[STAMINA PENDING — ENFORCE SAVE LOG]: The [DAILY SAVE LOG] notes the -2 Morning Wake-Up stamina cost is still "pending at Proceed". Deduct the -2 morning cost exactly once this turn per the [STAMINA GUARD] and do not deduct it again.`;
     }
+    // Dialogue Isolation Gate: computed from the RAW player input (before any
+    // appended directives), appended only to the outgoing userPrompt, and never
+    // persisted — so the frozen system prefix stays byte-identical.
+    const dialogueGate =
+      currentGameState === "ACTIVE" &&
+      !body.playerInput.includes("[MANDATORY SYSTEM DIRECTIVE")
+        ? buildDialogueIsolationDirective(body.playerInput)
+        : "";
+
     // 3. Inject Time Clock Telemetry ONLY during active gameplay turns
     // (Completely skips Maintenance Window / WAITING COMMAND, Sleep, Save, Summary, and Proceed)
     if (
@@ -400,7 +410,7 @@ Deno.serve(async (req: Request) => {
       { currentSeason, currentYear },
       Boolean(body.gentleDay),
     );
-    const userPrompt = `${buildUserPrompt(effectiveReq)}${dynamicTurnTail}${perTurnTail}`;
+    const userPrompt = `${buildUserPrompt(effectiveReq)}${dialogueGate ? `\n\n${dialogueGate}` : ""}${dynamicTurnTail}${perTurnTail}`;
     const conversationMessages = buildConversationMessages(
       body.conversationHistory ?? [],
       userPrompt,
@@ -412,7 +422,8 @@ Deno.serve(async (req: Request) => {
       activeKey.base_url,
       systemPrompt,
       conversationMessages,
-      effectiveReq.aiModel
+      effectiveReq.aiModel,
+      req.signal,
     );
 
     if (providerError) {
@@ -421,6 +432,15 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({ error: providerError }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // Client aborted mid-generation: stop here so no phantom DB mutations
+    // (story_state, turn_count, chat persistence) happen for a discarded turn.
+    if (req.signal.aborted) {
+      return new Response(JSON.stringify({ aborted: true }), {
+        status: 499,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // ---- 8. Post-process the narration ----
@@ -456,6 +476,13 @@ Deno.serve(async (req: Request) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
+    if (req.signal.aborted || (err instanceof Error && err.name === "AbortError")) {
+      console.log("Narrate request aborted by client; no state was persisted.");
+      return new Response(JSON.stringify({ aborted: true }), {
+        status: 499,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     console.error("Narrate function error:", err);
     return new Response(
       JSON.stringify({ error: (err as Error).message || "An unexpected error occurred" }),

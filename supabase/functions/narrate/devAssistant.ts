@@ -88,6 +88,7 @@ async function rawDevChat(
   systemPrompt: string,
   conversationMessages: DevAssistantMessage[],
   requestedModel?: string,
+  signal?: AbortSignal,
 ): Promise<{ text: string; error: string | null }> {
   const lookupKey = requestedModel || provider;
   const model = PROVIDER_MODELS[lookupKey] ?? "gpt-4o";
@@ -107,6 +108,7 @@ async function rawDevChat(
           contents,
           generationConfig: { temperature: 0.7, maxOutputTokens: 16192 },
         }),
+        signal,
       });
       if (!response.ok) {
         const errText = await response.text();
@@ -132,6 +134,7 @@ async function rawDevChat(
           max_tokens: 16000,
           temperature: 0.7,
         }),
+        signal,
       });
       if (!response.ok) {
         const errText = await response.text();
@@ -167,6 +170,7 @@ async function rawDevChat(
         temperature: 0.7,
         max_tokens: 16000,
       }),
+      signal,
     });
     if (!response.ok) {
       const errText = await response.text();
@@ -290,9 +294,14 @@ export async function handleDevAssistant(req: Request, body: DevAssistantRequest
       systemPrompt,
       cleanMessages,
       body.aiModel,
+      req.signal,
     );
 
     if (providerError) {
+      if (req.signal.aborted) {
+        console.log("devAssistant request aborted by client.");
+        return json({ aborted: true }, 499);
+      }
       console.error("devAssistant provider error:", providerError);
       return json({ error: providerError }, 502);
     }
