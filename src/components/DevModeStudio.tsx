@@ -272,6 +272,13 @@ export default function DevModeStudio() {
     prevChatCountRef.current = chatMessages.length;
   }, [chatMessages]);
 
+  // Jump to the newest message whenever the Dev Chat tab is opened.
+  useEffect(() => {
+    if (studioTab === 'chat' && feedRef.current) {
+      feedRef.current.scrollTop = feedRef.current.scrollHeight;
+    }
+  }, [studioTab, chatHistoryLoading]);
+
   const attachedFiles = useMemo(() => files.filter((f) => attachedIds.has(f.id)), [files, attachedIds]);
   const attachedTokens = useMemo(
     () => estimateTokens(attachedFiles.map((f) => f.content).join('\n')),
