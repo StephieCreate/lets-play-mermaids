@@ -32,10 +32,6 @@ const QUICK_PROMPTS = [
   'How do waystations and travel work?',
 ];
 
-interface SessionPayload {
-  messages: ChatMessage[];
-}
-
 interface SavedAssistantMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -60,14 +56,19 @@ async function fetchSavedMessages(userId: string): Promise<ChatMessage[]> {
     return [];
   }
   const rows = (data ?? []) as SavedAssistantMessage[];
-  return rows.map((row) => ({
-    id: row.id,
-    role: row.role,
-    content: row.content,
-    sources: row.metadata?.sources ?? [],
-    usedCharacters: row.metadata?.usedCharacters ?? false,
-    characterNames: row.metadata?.characterNames ?? [],
-  }));
+  return rows.map((row) => {
+    const meta = (row.metadata ?? {}) as Record<string, unknown>;
+    return {
+      id: row.id,
+      role: row.role,
+      content: row.content ?? '',
+      sources: Array.isArray(meta.sources) ? (meta.sources as SourceChip[]) : [],
+      usedCharacters: meta.usedCharacters === true,
+      characterNames: Array.isArray(meta.characterNames)
+        ? (meta.characterNames as unknown[]).filter((n): n is string => typeof n === 'string')
+        : [],
+    };
+  });
 }
 
 async function insertAssistantMessage(
@@ -265,35 +266,41 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
 
   const feedRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const prevCountRef = useRef(0);
+  const userId = user?.id ?? null;
 
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       setMessages([]);
       setHistoryLoading(false);
       return;
     }
     let cancelled = false;
     setHistoryLoading(true);
-    fetchSavedMessages(user.id).then((saved) => {
+    fetchSavedMessages(userId).then((saved) => {
       if (!cancelled) setMessages(saved);
       setHistoryLoading(false);
     });
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [userId]);
+
+  // Scroll only the inner chat container, and only when a new message is added.
+  useEffect(() => {
+    if (messages.length > prevCountRef.current && feedRef.current) {
+      feedRef.current.scrollTop = feedRef.current.scrollHeight;
+    }
+    prevCountRef.current = messages.length;
+  }, [messages]);
 
   useEffect(() => {
-    feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages, sending]);
-
-  useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
     let cancelled = false;
     supabase
       .from('user_ai_keys_safe')
       .select('id, provider, label')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .eq('is_active', true)
       .maybeSingle()
       .then(({ data }) => {
@@ -304,11 +311,11 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [userId]);
 
   // Populate the Character Context picker with the player's saved characters
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       setSavedCharacters([]);
       setSelectedCharacterId('');
       return;
@@ -317,7 +324,7 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
     supabase
       .from('characters')
       .select('id, name')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .then(({ data }) => {
         if (cancelled) return;
@@ -326,7 +333,7 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [userId]);
 
   const clearChat = async () => {
     if (!user) return;
@@ -564,7 +571,7 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
               Ask anything about the rules — answers cite the exact rule section they came from.
             </p>
             <div className="flex flex-wrap justify-center gap-2">
-              {STARTER_CHIPS.map((chip) => (
+              {QUICK_PROMPTS.map((chip) => (
                 <button
                   key={chip}
                   type="button"

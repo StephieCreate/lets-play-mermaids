@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useFontSettings } from '@/context/FontSettingsContext';
 import { supabase } from '@/lib/supabase';
 import MarkdownChat from '@/components/devMode/MarkdownChat';
 import RulePane from '@/components/devMode/RulePane';
@@ -113,6 +114,7 @@ function loadBaseline(): Record<string, string> {
 
 export default function DevModeStudio() {
   const { user, isAdmin } = useAuth();
+  const { fontFamilyClass, fontPx } = useFontSettings();
 
   const [studioTab, setStudioTab] = useState<StudioTab>('viewer');
   const [files, setFiles] = useState<DevFile[]>([]);
@@ -137,6 +139,8 @@ export default function DevModeStudio() {
 
   const feedRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const prevChatCountRef = useRef(0);
+  const userId = user?.id ?? null;
 
   // ---- Data loading ----
   useEffect(() => {
@@ -221,16 +225,16 @@ export default function DevModeStudio() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [userId]);
 
   // Active AI key + bound model preference label for the context bar
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
     let cancelled = false;
     supabase
       .from('user_ai_keys_safe')
       .select('id, provider, label')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .eq('is_active', true)
       .maybeSingle()
       .then(({ data }) => {
@@ -241,28 +245,32 @@ export default function DevModeStudio() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [userId]);
 
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       setChatMessages([]);
       setChatHistoryLoading(false);
       return;
     }
     let cancelled = false;
     setChatHistoryLoading(true);
-    fetchSavedMessages(user.id).then((saved) => {
+    fetchSavedMessages(userId).then((saved) => {
       if (!cancelled) setChatMessages(saved);
       setChatHistoryLoading(false);
     });
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [userId]);
 
+  // Scroll only the inner chat container, and only when a new message is added.
   useEffect(() => {
-    feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight, behavior: 'smooth' });
-  }, [chatMessages, chatSending]);
+    if (chatMessages.length > prevChatCountRef.current && feedRef.current) {
+      feedRef.current.scrollTop = feedRef.current.scrollHeight;
+    }
+    prevChatCountRef.current = chatMessages.length;
+  }, [chatMessages]);
 
   const attachedFiles = useMemo(() => files.filter((f) => attachedIds.has(f.id)), [files, attachedIds]);
   const attachedTokens = useMemo(
@@ -728,9 +736,14 @@ export default function DevModeStudio() {
                   </div>
                 </div>
                 {message.role === 'user' ? (
-                  <p className="whitespace-pre-wrap break-words leading-relaxed text-pearl/90">{message.content}</p>
+                  <p
+                    className={`whitespace-pre-wrap break-words leading-relaxed text-pearl/90 ${fontFamilyClass}`}
+                    style={{ fontSize: fontPx }}
+                  >
+                    {message.content}
+                  </p>
                 ) : (
-                  <div className="min-w-0">
+                  <div className={`min-w-0 ${fontFamilyClass}`} style={{ fontSize: fontPx }}>
                     <MarkdownChat content={message.content} />
                   </div>
                 )}
