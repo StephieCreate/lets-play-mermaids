@@ -315,28 +315,30 @@ export function getDailyEncounter(roll: number, weatherModifier: number = 0): { 
  * Server-Side Math: Calculates the Ocean Condition based on the season and a 1d10 roll.
  */
 export function getOceanCondition(season: string, roll: number): { name: string; effect: string } {
-  const currentSeason = season.toLowerCase();
+  // Trim + strip punctuation so season wording differences never fail lookup
+  const currentSeason = season.trim().toLowerCase().replace(/[^a-z]/g, "");
+  const normalizedRoll = Math.max(1, Math.min(10, Math.round(roll)));
 
   if (currentSeason === 'spring') {
-    if (roll <= 4) return { name: "Crystal Clear", effect: "Ideal visibility. Standard Evasion/Foraging." };
-    if (roll <= 8) return { name: "Plankton Bloom", effect: "Murky water. Perception -5. Camouflage +5." };
+    if (normalizedRoll <= 4) return { name: "Crystal Clear", effect: "Ideal visibility. Standard Evasion/Foraging." };
+    if (normalizedRoll <= 8) return { name: "Plankton Bloom", effect: "Murky water. Perception -5. Camouflage +5." };
     return { name: "Current Surge", effect: "Strong flow. Endurance -5. Travel is difficult." };
   }
 
   if (currentSeason === 'summer') {
-    if (roll <= 4) return { name: "Calm Blue", effect: "Standard conditions." };
-    if (roll <= 8) return { name: "Thermal Layer", effect: "Speed +5, but heat causes rapid fatigue. All Stamina drains cost an additional -1 Stamina." };
+    if (normalizedRoll <= 4) return { name: "Calm Blue", effect: "Standard conditions." };
+    if (normalizedRoll <= 8) return { name: "Thermal Layer", effect: "Speed +5, but heat causes rapid fatigue. All Stamina drains cost an additional -1 Stamina." };
     return { name: "Surface Storm", effect: "Turbulence reaches the depths. Evasion -10 due to debris." };
   }
 
   if (currentSeason === 'fall' || currentSeason === 'autumn') {
-    if (roll <= 4) return { name: "Crisp/Cold", effect: "Standard conditions." };
-    if (roll <= 8) return { name: "Migratory Crossing", effect: "Many predators in the area. Evasion Checks required for travel." };
+    if (normalizedRoll <= 4) return { name: "Crisp/Cold", effect: "Standard conditions." };
+    if (normalizedRoll <= 8) return { name: "Migratory Crossing", effect: "Many predators in the area. Evasion Checks required for travel." };
     return { name: "Abyssal Murk", effect: "Silt from the shelf clouds the water. Visibility zero." };
   }
 
   if (currentSeason === 'winter') {
-    if (roll <= 6) return { name: "The Deep Chill", effect: "Cold water. Endurance -10. Must stay near the Grotto." };
+    if (normalizedRoll <= 6) return { name: "The Deep Chill", effect: "Cold water. Endurance -10. Must stay near the Grotto." };
     return { name: "Silent Stillness", effect: "No currents. Sound travels further. Perception +10." };
   }
 
@@ -357,14 +359,22 @@ export function applyCommandInterceptors(body: NarrateRequest): string {
     currentGameState = "WAITING COMMAND";
 
     // --- THE MARKOV FRONT ALGORITHM (Replaces raw d10) ---
+    // Always a fresh random transition from true randomness (Math.random) —
+    // never a day-seeded hash, never a reuse of a stale weather value left in
+    // story_state by a deleted/rerolled message.
     const lastWeatherRoll = body.storyState["weather_roll"] as number | undefined;
-    const lastWeather = (body.storyState["last_weather"] as string) || null;
+    const hasValidLastRoll =
+      typeof lastWeatherRoll === "number" &&
+      Number.isFinite(lastWeatherRoll) &&
+      lastWeatherRoll >= 1 &&
+      lastWeatherRoll <= 10;
+    const lastWeather = ((body.storyState["last_weather"] as string) || "").trim().toLowerCase() || null;
     const lastStreak = (body.storyState["weather_streak"] as number) || 0;
-    const currentSeason = (body.storyState["current_season"] as string) || "spring";
+    const currentSeason = ((body.storyState["current_season"] as string) || "spring").trim().toLowerCase();
 
     let weatherRoll: number;
 
-    if (lastWeatherRoll !== undefined) {
+    if (hasValidLastRoll && lastWeatherRoll !== undefined) {
       // Generate a gradual shift between -2 and +2
       const shift = Math.floor(Math.random() * 5) - 2;
       let candidate = lastWeatherRoll + shift;
@@ -373,7 +383,7 @@ export function applyCommandInterceptors(body: NarrateRequest): string {
       if (candidate > 10) candidate = 20 - candidate;
       weatherRoll = candidate;
     } else {
-      // First day of the game: true random starting point
+      // First day of the game (or an invalid/stale roll): true random starting point
       weatherRoll = Math.floor(Math.random() * 10) + 1;
     }
 
@@ -385,16 +395,18 @@ export function applyCommandInterceptors(body: NarrateRequest): string {
     // consecutive day — day 3 forces a transition to a different state.
     const isUncommonOrSpecial = (roll: number) =>
       currentSeason === "winter" ? roll >= 7 : roll >= 5;
-    let weatherStreak = weather.name === lastWeather ? lastStreak + 1 : 1;
+    // last_weather is stored normalized (lowercase, trimmed) so comparisons are
+    // resilient to wording drift; the canonical mixed-case name is in weather_condition.
+    let weatherStreak = weather.name.toLowerCase() === lastWeather ? lastStreak + 1 : 1;
 
     if (
-      weather.name === lastWeather &&
+      weather.name.toLowerCase() === lastWeather &&
       (weatherStreak > 2 || (isUncommonOrSpecial(weatherRoll) && Math.random() >= 0.15))
     ) {
       for (let attempt = 0; attempt < 25; attempt++) {
         const reroll = Math.floor(Math.random() * 10) + 1;
         const next = getOceanCondition(currentSeason, reroll);
-        if (next.name !== lastWeather) {
+        if (next.name.toLowerCase() !== lastWeather) {
           weatherRoll = reroll;
           weather = next;
           weatherStreak = 1;
@@ -407,7 +419,7 @@ export function applyCommandInterceptors(body: NarrateRequest): string {
     body.storyState["weather_roll"] = weatherRoll;
     body.storyState["weather_condition"] = weather.name;
     body.storyState["weather_effect"] = weather.effect;
-    body.storyState["last_weather"] = weather.name;
+    body.storyState["last_weather"] = weather.name.trim().toLowerCase();
     body.storyState["weather_streak"] = weatherStreak;
 
     // Explicitly hand the AI the final answer so it doesn't have to look it up
@@ -421,11 +433,14 @@ export function applyCommandInterceptors(body: NarrateRequest): string {
     currentGameState = "ACTIVE";
 
     // Look up tomorrow's weather from the state (or default to 0 if it wasn't saved)
-    const weatherCondition = (body.storyState["weather_condition"] as string) || "Standard";
+    // Normalized (trim + lowercase + punctuation stripped) so minor wording or
+    // punctuation differences in story state never fail the modifier lookup.
+    const weatherCondition =
+      ((body.storyState["weather_condition"] as string) || "Standard").trim().toLowerCase().replace(/[^a-z\s]/g, "");
 
     // Determine the environmental penalty based on the known condition names
     let weatherModifier = 0;
-    if (weatherCondition === "Storm" || weatherCondition === "Surface Storm") weatherModifier = 5;
+    if (weatherCondition.includes("storm")) weatherModifier = 5;
 
     // --- THE ENCOUNTER BAG ALGORITHM (Replaces raw d20) ---
     // 1. Retrieve the bag from state, or default to an empty array

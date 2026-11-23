@@ -15,6 +15,7 @@ import {
   applyCommandInterceptors,
   buildDialogueIsolationDirective,
   buildTimePassageDirective,
+  isNightlyHalt,
   isSaveRequest,
   isSummaryRequest,
 } from "./gameMechanics.ts";
@@ -216,7 +217,17 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // 1. Check if the Save Log already locked in today's Ocean Condition
+    // 1. Check if the Save Log already locked in today's Ocean Condition.
+    // The WEATHER LOCK enforces the Save Log's condition ONLY on daytime/Proceed
+    // turns. It must NEVER fire on Nightly Halt (which just rolled a fresh
+    // Markov weather) or Save turns — otherwise a stale Save Log line overrides
+    // the freshly rolled condition and the weather gets stuck across rerolled
+    // turns. Both matchers are AI-appended directive text, so anchor on those.
+    const isNightlyHaltTurn = isNightlyHalt(body.playerInput);
+    const isSaveTurn = isSaveRequest(body.playerInput);
+    const isProceedTurn =
+      body.playerInput.includes("The player has typed Proceed") && !isNightlyHaltTurn && !isSaveTurn;
+
     const saveLogWeatherMatch = dailySaveLog.match(/Ocean Condition:\s*([^\n|*]+)/i);
     const lockedSaveLogWeather =
       saveLogWeatherMatch && !/pending|none|tbd/i.test(saveLogWeatherMatch[1])
@@ -226,7 +237,7 @@ Deno.serve(async (req: Request) => {
     // 2. Check if the Save Log explicitly noted that the -2 morning stamina cost is still pending
     const staminaPendingInSaveLog = /pending at Proceed/i.test(dailySaveLog);
 
-    if (lockedSaveLogWeather && body.playerInput.includes("The player has typed Proceed")) {
+    if (lockedSaveLogWeather && isProceedTurn) {
       body.playerInput += `\n\n[WEATHER LOCK — ENFORCE SAVE LOG]: Today's Ocean Condition is already locked in the [DAILY SAVE LOG] as:   "${lockedSaveLogWeather}". You are STRICTLY FORBIDDEN from rolling or substituting a different weather condition (such as Plankton Bloom). Use "${lockedSaveLogWeather}" and its exact modifiers in your OOC block and narrative.`;
     }
 
