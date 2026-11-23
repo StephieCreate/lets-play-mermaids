@@ -9,19 +9,52 @@
         );
       }
     </script>
+    <!-- Owned artwork not yet added. Drop a 1200x630 open-graph image at public/og-image.png
+         and a mermaid favicon at public/favicon.svg, then update the hrefs below. -->
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Let's Play Mermaids — A Dark Ocean Survival Romance RPG</title>
-    <meta name="description" content="A dark ocean survival romance RPG. Create your mermaid, survive the depths, and shape your story." />
-    <link rel="canonical" href="https://letsplaymermaids.com" />
-    <meta property="og:url" content="https://letsplaymermaids.com" />
+    <title>Let's Play Mermaids: Dark Ocean Survival — Text-Based Dark Romance RPG</title>
+    <meta name="description" content="Let's Play Mermaids: Dark Ocean Survival is a browser-based text RPG. Create your mermaid, survive the dark ocean, forge bonds, and shape a story driven by AI narration and your choices." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://letsplaymermaids.com/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://letsplaymermaids.com/" />
     <meta property="og:site_name" content="Let's Play Mermaids" />
+    <meta property="og:title" content="Let's Play Mermaids: Dark Ocean Survival" />
+    <meta property="og:description" content="A dark ocean survival romance RPG you play in your browser. Create your mermaid, brave the depths, and shape your story." />
+    <!-- Replace with https://letsplaymermaids.com/og-image.png once public/og-image.png exists. -->
     <meta property="og:image" content="https://bolt.new/static/og_default.png" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Let's Play Mermaids: Dark Ocean Survival" />
+    <meta name="twitter:description" content="A dark ocean survival romance RPG you play in your browser. Create your mermaid, brave the depths, and shape your story." />
+    <!-- Replace with https://letsplaymermaids.com/og-image.png once public/og-image.png exists. -->
     <meta name="twitter:image" content="https://bolt.new/static/og_default.png" />
+    <!-- <meta name="google-site-verification" content="PASTE_GOOGLE_CODE_HERE" /> -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "VideoGame",
+        "name": "Let's Play Mermaids: Dark Ocean Survival",
+        "url": "https://letsplaymermaids.com/",
+        "description": "A browser-based text RPG. Create your mermaid, survive the dark ocean, forge bonds with its denizens, and shape a story driven by AI narration and your choices.",
+        "genre": ["Text-Based RPG", "Survival", "Dark Romance", "Interactive Fiction"],
+        "playMode": "SinglePlayer",
+        "applicationCategory": "Game",
+        "operatingSystem": "Web Browser"
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <h1>Let's Play Mermaids: Dark Ocean Survival</h1>
+      <p>
+        Let's Play Mermaids: Dark Ocean Survival is a text-based dark romance survival RPG you play in your web
+        browser. Create your own mermaid, explore a dark ocean full of danger and ancient secrets, manage your
+        stats to survive, and forge bonds with the denizens of the deep. Every playthrough is a story shaped by
+        your choices and brought to life by AI narration. Enable JavaScript to begin your dive.
+      </p>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
