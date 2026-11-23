@@ -358,31 +358,62 @@ export function applyCommandInterceptors(body: NarrateRequest): string {
 
     // --- THE MARKOV FRONT ALGORITHM (Replaces raw d10) ---
     const lastWeatherRoll = body.storyState["weather_roll"] as number | undefined;
+    const lastWeather = (body.storyState["last_weather"] as string) || null;
+    const lastStreak = (body.storyState["weather_streak"] as number) || 0;
+    const currentSeason = (body.storyState["current_season"] as string) || "spring";
+
     let weatherRoll: number;
 
     if (lastWeatherRoll !== undefined) {
       // Generate a gradual shift between -2 and +2
       const shift = Math.floor(Math.random() * 5) - 2;
-      // Apply shift and clamp the result so it stays exactly between 1 and 10
-      weatherRoll = Math.max(1, Math.min(10, lastWeatherRoll + shift));
+      let candidate = lastWeatherRoll + shift;
+      // Bounce inward off the 1/10 edges instead of clamping onto the same state
+      if (candidate < 1) candidate = 2 - candidate;
+      if (candidate > 10) candidate = 20 - candidate;
+      weatherRoll = candidate;
     } else {
       // First day of the game: true random starting point
       weatherRoll = Math.floor(Math.random() * 10) + 1;
     }
 
-    const currentSeason = (body.storyState["current_season"] as string) || "spring";
+    let weather = getOceanCondition(currentSeason, weatherRoll);
 
-    // The backend does the math!
-    const weather = getOceanCondition(currentSeason, weatherRoll);
+    // Anti-stickiness guard: uncommon/special conditions (Plankton Bloom,
+    // Surface Storm, Abyssal Murk, Thermal Layer, Migratory Crossing, Silent
+    // Stillness) repeat only with 15% weight, and NO condition may run a 3rd
+    // consecutive day — day 3 forces a transition to a different state.
+    const isUncommonOrSpecial = (roll: number) =>
+      currentSeason === "winter" ? roll >= 7 : roll >= 5;
+    let weatherStreak = weather.name === lastWeather ? lastStreak + 1 : 1;
+
+    if (
+      weather.name === lastWeather &&
+      (weatherStreak > 2 || (isUncommonOrSpecial(weatherRoll) && Math.random() >= 0.15))
+    ) {
+      for (let attempt = 0; attempt < 25; attempt++) {
+        const reroll = Math.floor(Math.random() * 10) + 1;
+        const next = getOceanCondition(currentSeason, reroll);
+        if (next.name !== lastWeather) {
+          weatherRoll = reroll;
+          weather = next;
+          weatherStreak = 1;
+          break;
+        }
+      }
+    }
 
     // Save it to the story state so the frontend/database can see it
     body.storyState["weather_roll"] = weatherRoll;
     body.storyState["weather_condition"] = weather.name;
     body.storyState["weather_effect"] = weather.effect;
+    body.storyState["last_weather"] = weather.name;
+    body.storyState["weather_streak"] = weatherStreak;
 
     // Explicitly hand the AI the final answer so it doesn't have to look it up
     body.playerInput += `\n\n[MANDATORY SYSTEM DIRECTIVE: The player has initiated the Nightly Halt. The backend has rolled a ${weatherRoll} on the 1d10 for tomorrow's weather.
     [SERVER MATH OVERRIDE]: Tomorrow's condition is ${weather.name}. Effect: ${weather.effect}.
+    [SAVE LOG WEATHER OVERWRITE]: You MUST overwrite the "Ocean Condition" line in the [DAILY SAVE LOG] with "${weather.name} — ${weather.effect}" and its exact modifiers. Do NOT recycle yesterday's weather: tomorrow's Proceed must use this freshly rolled condition, or the [WEATHER LOCK] will enforce the stale one.
     Print the Weather Calculation block using these exact server-provided values, print the Maintenance Window prompt verbatim, and STOP. Do not generate narrative.]`;
   }
 
@@ -455,7 +486,7 @@ export function applyCommandInterceptors(body: NarrateRequest): string {
     // Flip the initialization flag so the Hard-State armor engages for the rest of the game
     body.storyState["files_initialized"] = true;
 
-    body.playerInput += `\n\n[MANDATORY SYSTEM DIRECTIVE FOR DAILY SAVE LOG]:\nThe player has commanded a save. You MUST output an updated Daily Save Log capturing all events, wound penalties, supplies consumed, and time progression. Format strictly according to Tab 2 specifications in a clean Markdown code block with zero conversational filler.\n[STAMINA TIMING LOCK]: Apply ONLY overnight rest/healing/thermal quartz bonuses. You are STRICTLY FORBIDDEN from deducting the -2 Morning Wake-Up Stamina cost during Save Log generation. Record the player's rested Stamina and write "(-2 pending at Proceed)" next to it.`;
+    body.playerInput += `\n\n[MANDATORY SYSTEM DIRECTIVE FOR DAILY SAVE LOG]:\nThe player has commanded a save. You MUST output an updated Daily Save Log capturing all events, wound penalties, supplies consumed, and time progression. Format strictly according to Tab 2 specifications in a clean Markdown code block with zero conversational filler.\n[SAVE LOG WEATHER OVERWRITE]: Write the "Ocean Condition" line using the server-locked condition for the CURRENT day — "${(body.storyState["weather_condition"] as string) || "Standard"}" — exactly as provided in story state. Do NOT recycle a previous day's weather into the Save Log.\n[STAMINA TIMING LOCK]: Apply ONLY overnight rest/healing/thermal quartz bonuses. You are STRICTLY FORBIDDEN from deducting the -2 Morning Wake-Up Stamina cost during Save Log generation. Record the player's rested Stamina and write "(-2 pending at Proceed)" next to it.`;
   }
 
   // --- THE APP-INJECTED STANDBY ROLL (Universal Backend Protocol) ---
