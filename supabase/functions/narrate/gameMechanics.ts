@@ -347,24 +347,45 @@ export function getOceanCondition(season: string, roll: number): { name: string;
 }
 
 /**
- * Extracts the current Pressure Gauge penalty from the Daily Save Log.
- * Handles bolding, label variations ("Pressure:", "Pressure Gauge:", "Pressure Penalty:"),
- * and both ASCII hyphen (-) and Unicode minus (−).
+ * Reads the active Pressure penalty from the Daily Save Log.
+ * Markdown rules remain the sole authority on how Pressure builds or resets.
  */
-export function parsePressureFromSaveLog(saveLog: string): number | null {
-  if (!saveLog) return null;
-  const match = saveLog.match(
-    /\bpressure(?:\s+(?:gauge|penalty|level))?(?:\s*:\*{0,2}|\*{0,2}\s*:)\s*\*{0,2}\s*[−-]?(\d+)/i
+export function parsePressureFromSaveLog(saveLog: string): number {
+  if (!saveLog) return 0;
+
+  // Grab only the value portion of the Pressure line
+  const lineMatch = saveLog.match(
+    /\bpressure(?:\s+(?:gauge|penalty|level))?(?:\s*:\*{0,2}|\*{0,2}\s*:)\s*([^\n]+)/i
   );
-  if (!match) return null;
-  const parsed = parseInt(match[1], 10);
-  return Number.isFinite(parsed) ? Math.abs(parsed) : null;
+  if (!lineMatch) return 0;
+
+  const line = lineMatch[1].trim();
+
+  // Explicit zero / cleared / none
+  if (/^\*{0,2}\s*(?:none|n\/a|clear|cleared|reset|0\b)/i.test(line)) {
+    return 0;
+  }
+
+  // Case A: Starts with a number (e.g. "5 (Day 12...)", "-5", "−5", "**5**")
+  const leadingNum = line.match(/^\*{0,2}\s*[+−-]?(\d+)/);
+  if (leadingNum) {
+    return parseInt(leadingNum[1], 10) || 0;
+  }
+
+  // Case B: Label before number (e.g. "Active (−5 penalty on Day 13)")
+  // Only matches a signed penalty so it ignores numbers like "Day 12"
+  const signedPenalty = line.match(/[−-](\d+)/);
+  if (signedPenalty) {
+    return parseInt(signedPenalty[1], 10) || 0;
+  }
+
+  return 0;
 }
 
 /**
- * Runs the Nightly Halt (Markov weather), Day Start Anchor (Encounter Bag +
- * Proceed directive), Summary, Save, and Standby Roll blocks. Mutates
- * body.playerInput / body.storyState and returns the current game mode.
+- Runs the Nightly Halt (Markov weather), Day Start Anchor (Encounter Bag +
+- Proceed directive), Summary, Save, and Standby Roll blocks. Mutates
+- body.playerInput / body.storyState and returns the current game mode.
  */
 export function applyCommandInterceptors(body: NarrateRequest, dailySaveLog = ""): string {
   // Default to ACTIVE if no mode is currently set
@@ -478,22 +499,13 @@ export function applyCommandInterceptors(body: NarrateRequest, dailySaveLog = ""
     // 4. Save the smaller bag back to state for tomorrow
     body.storyState["encounter_bag"] = encounterBag;
 
-   // 5. Apply Pressure Gauge penalty (Save Log takes priority over storyState so edits/saves always sync)
-    const saveLogPressure = parsePressureFromSaveLog(dailySaveLog);
-    const storedPressure = Number(body.storyState["pressure_penalty"]) || 0;
-    const pressurePenalty = saveLogPressure !== null ? saveLogPressure : storedPressure;
-
-    // Clamp modified roll to 1–20 so the AI never receives a negative number
+    // 5. Read active Pressure penalty directly from the Daily Save Log (0 if none)
+    const pressurePenalty = parsePressureFromSaveLog(dailySaveLog);
     const finalRoll = Math.max(1, Math.min(20, rawRoll - pressurePenalty));
 
+    // Mirror what was applied this morning for reference/debugging
+    body.storyState["pressure_penalty"] = pressurePenalty;
     body.storyState["encounter_roll"] = finalRoll;
-
-    // 6. Auto-update tomorrow's Pressure Gauge in storyState for the next Proceed
-    // (Adjust safe-day threshold/step below if your Universal Core Engine uses different numbers)
-    const SAFE_DAY_THRESHOLD = 13; // 13+ = Neutral/Gentle/Maintenance/Jackpot; <=12 = Threat/Rival/Hazard
-    const PRESSURE_STEP = 5;
-    const nextPressurePenalty = finalRoll >= SAFE_DAY_THRESHOLD ? pressurePenalty + PRESSURE_STEP : 0;
-    body.storyState["pressure_penalty"] = nextPressurePenalty;
 
     // The backend does the math!
     const encounter = getDailyEncounter(finalRoll, weatherModifier);
@@ -508,7 +520,7 @@ export function applyCommandInterceptors(body: NarrateRequest, dailySaveLog = ""
       ? `The AI MUST look up the creature's CR and calculate the DC using the Tier & CR Difficulty Model — do NOT copy a static number.`
       : `The AI MUST NOT recalculate the DC.`;
 
-   const rollBreakdown = pressurePenalty > 0
+    const rollBreakdown = pressurePenalty > 0
       ? `raw bag draw ${rawRoll} − Pressure Penalty ${pressurePenalty} = modified ${finalRoll}`
       : `raw bag draw ${rawRoll} (Pressure Penalty: 0) = modified ${finalRoll}`;
 
@@ -522,12 +534,8 @@ export function applyCommandInterceptors(body: NarrateRequest, dailySaveLog = ""
     [SEQUENCING GATE]: You must present the encounter and then IMMEDIATELY STOP. Do NOT narrate the player's reaction, do NOT resolve the survival check, and do NOT move the player. End your response by asking the player what they do.
     [STAMINA GUARD]: Inspect the [DAILY SAVE LOG]. Deduct the -2 Morning Wake-Up stamina cost ONLY ONCE. If the Save Log says "(-2 pending at Proceed)", deduct -2 now. If the Save Log ALREADY deducted the -2 morning cost when saving, DO NOT deduct it a second time!
     [FORMATTING LOCK]: You MUST include the exact "Stat Tracker: Stm [X/10]..." line inside your OOC block, reflecting the accurate morning stamina.]`;
-
-    Resume Mode B Narrative Gameplay by generating the morning scene using these exact server-provided facts. ${dcRecalc}
-    [SEQUENCING GATE]: You must present the encounter and then IMMEDIATELY STOP. Do NOT narrate the player's reaction, do NOT resolve the survival check, and do NOT move the player. End your response by asking the player what they do.
-    [STAMINA GUARD]: Inspect the [DAILY SAVE LOG]. Deduct the -2 Morning Wake-Up stamina cost ONLY ONCE. If the Save Log says "(-2 pending at Proceed)", deduct -2 now. If the Save Log ALREADY deducted the -2 morning cost when saving, DO NOT deduct it a second time!
-    [FORMATTING LOCK]: You MUST include the exact "Stat Tracker: Stm [X/10]..." line inside your OOC block, reflecting the accurate morning stamina.`;
   }
+
   else if (isSummaryRequest(body.playerInput)) {
     body.playerInput += `\n\n[MANDATORY SYSTEM DIRECTIVE FOR NARRATIVE SUMMARY]:\nThe player has commanded a summary. You MUST summarize the specific events, encounters, and dialogue of the CURRENT IN-GAME DAY ONLY. Base your summary 100% on the active chat history. Output in a clean Markdown code block with zero conversational filler. Follow the MODULE A: THE NARRATIVE SUMMARY template supplied in this turn's <dynamic_turn_rules> VERBATIM: reproduce its exact heading hierarchy (#, ##, ###, ####) and bold field labels exactly as written — NEVER wrap Markdown heading hashes in bold (e.g., never print **### Title**), NEVER drop the space after heading hashes, and NEVER omit the required blank lines between sections.`;
   }
