@@ -226,7 +226,7 @@ export async function handleDevAssistant(req: Request, body: DevAssistantRequest
           m.content.trim().length > 0,
       )
       .slice(-40)
-      .map((m) => ({ role: m.role as "user" | "assistant", content: m.content.slice(0, 24000) }));
+      .map((m) => ({ role: m.role as "user" | "assistant", content: m.content.slice(0, 60000) }));
 
     if (cleanMessages.length === 0) {
       return json({ error: "Missing conversation messages." }, 400);
@@ -267,6 +267,8 @@ export async function handleDevAssistant(req: Request, body: DevAssistantRequest
 
     // ---- 4. Build the Dev Mode system prompt (RPG pipeline fully bypassed) ----
     const attachedFiles = Array.isArray(body.attachedFiles) ? body.attachedFiles : [];
+    const MAX_RULE_FILE_CHARS = 400_000;
+    const truncatedFileWarnings: string[] = [];
     const safeFiles: DevAttachedFile[] = attachedFiles
       .filter(
         (f) =>
@@ -276,15 +278,36 @@ export async function handleDevAssistant(req: Request, body: DevAssistantRequest
           f.content.trim().length > 0,
       )
       .slice(0, 30)
-      .map((f) => ({
-        title: String(f.title).slice(0, 200),
-        slug: typeof f.slug === "string" ? f.slug.slice(0, 120) : "",
-        versionTag: typeof f.versionTag === "string" ? f.versionTag.slice(0, 40) : "",
-        source: f.source === "apex" ? "apex" : "rule",
-        content: String(f.content).slice(0, 120000),
-      }));
+      .map((f) => {
+        const content = String(f.content);
+        console.log(
+          `devAssistant rule loaded: ${typeof f.slug === "string" ? f.slug.slice(0, 120) : "(no slug)"} — ${content.length} chars`,
+        );
+        if (content.length > MAX_RULE_FILE_CHARS) {
+          truncatedFileWarnings.push(`${f.title} (${content.length.toLocaleString()} chars)`);
+          return {
+            title: String(f.title).slice(0, 200),
+            slug: typeof f.slug === "string" ? f.slug.slice(0, 120) : "",
+            versionTag: typeof f.versionTag === "string" ? f.versionTag.slice(0, 40) : "",
+            source: f.source === "apex" ? "apex" : "rule",
+            content: content.slice(0, MAX_RULE_FILE_CHARS),
+          };
+        }
+        return {
+          title: String(f.title).slice(0, 200),
+          slug: typeof f.slug === "string" ? f.slug.slice(0, 120) : "",
+          versionTag: typeof f.versionTag === "string" ? f.versionTag.slice(0, 40) : "",
+          source: f.source === "apex" ? "apex" : "rule",
+          content,
+        };
+      });
 
     const systemPrompt = DEV_SYSTEM_PROMPT + buildAttachedFilesContext(safeFiles);
+    if (truncatedFileWarnings.length > 0) {
+      console.warn(
+        `devAssistant RULE FILE SIZE WARNING: the following attached files exceeded the ${MAX_RULE_FILE_CHARS.toLocaleString()} character safety ceiling and were clipped: ${truncatedFileWarnings.join("; ")}`,
+      );
+    }
 
     // ---- 5. Raw chat call: zero RPG wrappers ----
     const { text, error: providerError } = await rawDevChat(
@@ -310,7 +333,12 @@ export async function handleDevAssistant(req: Request, body: DevAssistantRequest
       return json({ error: "The AI provider returned an empty response. Try again or check your key in AI Configuration." }, 502);
     }
 
-    return json({ reply: text });
+    const reply =
+      truncatedFileWarnings.length > 0
+        ? `${text}\n\n---\n⚠️ **Rule file size warning:** These attached files exceeded the ${MAX_RULE_FILE_CHARS.toLocaleString()} character safety ceiling and were clipped before reaching the AI: ${truncatedFileWarnings.join(", ")}. Update the rule documents to bring them under the ceiling.`
+        : text;
+
+    return json({ reply });
   } catch (err) {
     console.error("devAssistant error:", err);
     return json({ error: (err as Error).message || "An unexpected error occurred" }, 500);

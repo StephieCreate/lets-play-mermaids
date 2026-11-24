@@ -97,7 +97,7 @@ function chunkByHeadings(docSlug: string, docTitle: string, content: string): Ru
 
   const push = () => {
     const text = currentLines.join("\n").trim();
-    if (text) chunks.push({ docSlug, docTitle, heading: currentHeading, content: text.slice(0, 6000) });
+    if (text) chunks.push({ docSlug, docTitle, heading: currentHeading, content: text });
   };
 
   for (const line of content.split("\n")) {
@@ -153,7 +153,7 @@ function scoreChunks(chunks: RuleChunk[], message: string): RuleChunk[] {
 }
 
 function buildRuleSources(chunks: RuleChunk[]): { text: string; sources: Array<{ docTitle: string; heading: string }> } {
-  const MAX_WORDS = 3500;
+  const MAX_WORDS = 24000;
   let wordCount = 0;
   const used: RuleChunk[] = [];
   const sources: Array<{ docTitle: string; heading: string }> = [];
@@ -208,7 +208,7 @@ function extractStructuralOutline(text: string): string {
     if (/bond level/i.test(trimmed)) return true;
     return false;
   });
-  return kept.join("\n").slice(0, 14000);
+  return kept.join("\n").slice(0, 60000);
 }
 
 function buildHelperSystemPrompt(
@@ -446,6 +446,9 @@ Deno.serve(async (req: Request) => {
     // ---- 3. Chunk + score + inject top rule chunks (core rules only, zero spoilers) ----
     const allChunks: RuleChunk[] = [];
     for (const doc of docs) {
+      console.log(
+        `rules-helper rule loaded: ${doc.slug} — ${doc.content.length} chars`,
+      );
       allChunks.push(...chunkByHeadings(doc.slug, doc.title, doc.content));
     }
     const ranked = scoreChunks(allChunks, message);

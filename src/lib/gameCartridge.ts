@@ -2,9 +2,7 @@ import { supabase } from '@/lib/supabase';
 
 const CARTRIDGE_FORMAT = 'mermaids-game-cartridge';
 const CARTRIDGE_VERSION = 2;
-export const MAX_CARTRIDGE_BYTES = 2 * 1024 * 1024;
-const MAX_ENTRIES = 50;
-const MAX_TEXT_LENGTH = 500_000;
+export const MAX_CARTRIDGE_BYTES = 8 * 1024 * 1024;
 const MAX_TITLE_LENGTH = 200;
 const MAX_SLUG_LENGTH = 100;
 const SENSITIVE_KEYS = new Set(['api_key', 'key', 'secret', 'token', 'password']);
@@ -108,7 +106,7 @@ function isNonEmptyString(value: unknown, maxLength: number): value is string {
 }
 
 function isContentString(value: unknown): value is string {
-  return typeof value === 'string' && value.length <= MAX_TEXT_LENGTH;
+  return typeof value === 'string' && value.length > 0;
 }
 
 export function parseCartridge(text: string): ParsedCartridge {
@@ -119,11 +117,11 @@ export function parseCartridge(text: string): ParsedCartridge {
     throw new Error('This file is not a valid game cartridge.');
   }
 
-  const rawRules = data.rules.slice(0, MAX_ENTRIES);
-  const seenSlugs = new Set<string>();
   const rules: CartridgeRule[] = [];
+  const seenSlugs = new Set<string>();
+  const skippedSlugs: string[] = [];
 
-  for (const item of rawRules) {
+  for (const item of data.rules) {
     const entry = item as Partial<Record<keyof CartridgeRule, unknown>>;
     if (
       !isNonEmptyString(entry.slug, MAX_SLUG_LENGTH) ||
@@ -131,10 +129,17 @@ export function parseCartridge(text: string): ParsedCartridge {
       !isContentString(entry.content) ||
       seenSlugs.has(entry.slug)
     ) {
+      if (entry && typeof entry.slug === 'string') skippedSlugs.push(entry.slug);
       continue;
     }
     seenSlugs.add(entry.slug);
     rules.push({ slug: entry.slug, title: entry.title, content: entry.content });
+  }
+
+  if (skippedSlugs.length > 0) {
+    console.warn(
+      `Cartridge import: skipped ${skippedSlugs.length} invalid entry/entries: ${skippedSlugs.join(', ')}`,
+    );
   }
 
   return {

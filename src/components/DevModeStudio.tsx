@@ -38,7 +38,7 @@ interface ChatMessage {
 }
 
 const BASELINE_KEY = 'dev_mode_rule_baseline_v1';
-const MAX_CHAT_FILES_BYTES = 900000;
+const MAX_CHAT_FILES_BYTES = 8_000_000;
 const MAX_SAVED_MESSAGES = 200;
 
 interface SavedChatRow {
@@ -285,6 +285,10 @@ export default function DevModeStudio() {
   const attachedFiles = useMemo(() => files.filter((f) => attachedIds.has(f.id)), [files, attachedIds]);
   const attachedTokens = useMemo(
     () => estimateTokens(attachedFiles.map((f) => f.content).join('\n')),
+    [attachedFiles],
+  );
+  const attachedChars = useMemo(
+    () => attachedFiles.reduce((sum, f) => sum + f.content.length, 0),
     [attachedFiles],
   );
   const leftFile = files.find((f) => f.id === paneLeftId) ?? null;
@@ -557,7 +561,8 @@ export default function DevModeStudio() {
               Clear All
             </button>
             <span className="ml-auto text-xs text-muted">
-              <strong className="text-pearl">{attachedFiles.length}</strong> attached · ~
+              <strong className="text-pearl">{attachedFiles.length}</strong> attached ·{' '}
+              {(attachedChars / 1000).toFixed(1)}k chars (full text) · ~
               {attachedTokens.toLocaleString()} tokens
             </span>
           </div>
