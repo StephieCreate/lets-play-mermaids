@@ -76,11 +76,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // ---- 1. COMMAND INTERCEPTORS & STATE MACHINE ----
-    // (Nightly Halt Markov weather, Encounter Bag on Proceed, Summary/Save
-    // directives, and the Standby Roll Protocol)
-    const currentGameState = applyCommandInterceptors(body, dailySaveLog);
-    body.storyState["game_mode"] = currentGameState;
 
     // ---- 2. Resolve the user's active AI key (BYOK, any provider) ----
     // The playthrough has an owner; we fetch their active encrypted key,
@@ -224,8 +219,18 @@ Deno.serve(async (req: Request) => {
     // Markov weather) or Save turns — otherwise a stale Save Log line overrides
     // the freshly rolled condition and the weather gets stuck across rerolled
     // turns. Both matchers are AI-appended directive text, so anchor on those.
-    const isNightlyHaltTurn = isNightlyHalt(body.playerInput);
-    const isSaveTurn = isSaveRequest(body.playerInput);
+    // Check raw player intent BEFORE interceptors append directives
+    // (prevents "[DAILY SAVE LOG]" inside Proceed's stamina guard from tripping isSaveRequest)
+    const rawPlayerInput = body.playerInput;
+    const isNightlyHaltTurn = isNightlyHalt(rawPlayerInput);
+    const isSaveTurn = isSaveRequest(rawPlayerInput);
+    const isSummaryTurn = isSummaryRequest(rawPlayerInput);
+
+    // ---- COMMAND INTERCEPTORS & STATE MACHINE ----
+    // Runs after dailySaveLog is loaded so Proceed can read Pressure Gauge directly from the Save Log.
+    const currentGameState = applyCommandInterceptors(body, dailySaveLog);
+    body.storyState["game_mode"] = currentGameState;
+
     const isProceedTurn =
       body.playerInput.includes("The player has typed Proceed") && !isNightlyHaltTurn && !isSaveTurn;
 
@@ -297,7 +302,7 @@ Deno.serve(async (req: Request) => {
     const hasSaveLog = dailySaveLog && dailySaveLog.trim().length > 0;
     const hasRegister = grottoRegistry && grottoRegistry.trim().length > 0;
     const hasSummary = narrativeSummaries && narrativeSummaries.length > 0;
-    const isActivelySaving = isSaveRequest(body.playerInput) || isSummaryRequest(body.playerInput);
+    const isActivelySaving = isSaveTurn || isSummaryTurn;
 
     // Only hard-fail if the game has officially saved, suddenly loses its files, AND the player isn't actively trying to generate them right now.
     if (filesInitialized && !isActivelySaving && (!hasSaveLog || !hasRegister || !hasSummary)) {
