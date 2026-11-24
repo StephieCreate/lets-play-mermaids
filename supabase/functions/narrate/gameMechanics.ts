@@ -347,11 +347,26 @@ export function getOceanCondition(season: string, roll: number): { name: string;
 }
 
 /**
+ * Extracts the current Pressure Gauge penalty from the Daily Save Log.
+ * Handles bolding, label variations ("Pressure:", "Pressure Gauge:", "Pressure Penalty:"),
+ * and both ASCII hyphen (-) and Unicode minus (−).
+ */
+export function parsePressureFromSaveLog(saveLog: string): number | null {
+  if (!saveLog) return null;
+  const match = saveLog.match(
+    /\bpressure(?:\s+(?:gauge|penalty|level))?(?:\s*:\*{0,2}|\*{0,2}\s*:)\s*\*{0,2}\s*[−-]?(\d+)/i
+  );
+  if (!match) return null;
+  const parsed = parseInt(match[1], 10);
+  return Number.isFinite(parsed) ? Math.abs(parsed) : null;
+}
+
+/**
  * Runs the Nightly Halt (Markov weather), Day Start Anchor (Encounter Bag +
  * Proceed directive), Summary, Save, and Standby Roll blocks. Mutates
  * body.playerInput / body.storyState and returns the current game mode.
  */
-export function applyCommandInterceptors(body: NarrateRequest): string {
+export function applyCommandInterceptors(body: NarrateRequest, dailySaveLog = ""): string {
   // Default to ACTIVE if no mode is currently set
   let currentGameState = (body.storyState["game_mode"] as string) ?? "ACTIVE";
 
@@ -463,11 +478,22 @@ export function applyCommandInterceptors(body: NarrateRequest): string {
     // 4. Save the smaller bag back to state for tomorrow
     body.storyState["encounter_bag"] = encounterBag;
 
-    // 5. Apply any ongoing penalties stored in state (like Pressure Gauge)
-    const pressurePenalty = (body.storyState["pressure_penalty"] as number) || 0;
-    const finalRoll = rawRoll - pressurePenalty;
+   // 5. Apply Pressure Gauge penalty (Save Log takes priority over storyState so edits/saves always sync)
+    const saveLogPressure = parsePressureFromSaveLog(dailySaveLog);
+    const storedPressure = Number(body.storyState["pressure_penalty"]) || 0;
+    const pressurePenalty = saveLogPressure !== null ? saveLogPressure : storedPressure;
+
+    // Clamp modified roll to 1–20 so the AI never receives a negative number
+    const finalRoll = Math.max(1, Math.min(20, rawRoll - pressurePenalty));
 
     body.storyState["encounter_roll"] = finalRoll;
+
+    // 6. Auto-update tomorrow's Pressure Gauge in storyState for the next Proceed
+    // (Adjust safe-day threshold/step below if your Universal Core Engine uses different numbers)
+    const SAFE_DAY_THRESHOLD = 13; // 13+ = Neutral/Gentle/Maintenance/Jackpot; <=12 = Threat/Rival/Hazard
+    const PRESSURE_STEP = 5;
+    const nextPressurePenalty = finalRoll >= SAFE_DAY_THRESHOLD ? pressurePenalty + PRESSURE_STEP : 0;
+    body.storyState["pressure_penalty"] = nextPressurePenalty;
 
     // The backend does the math!
     const encounter = getDailyEncounter(finalRoll, weatherModifier);
