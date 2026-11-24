@@ -508,11 +508,20 @@ export function applyCommandInterceptors(body: NarrateRequest, dailySaveLog = ""
       ? `The AI MUST look up the creature's CR and calculate the DC using the Tier & CR Difficulty Model — do NOT copy a static number.`
       : `The AI MUST NOT recalculate the DC.`;
 
+   const rollBreakdown = pressurePenalty > 0
+      ? `raw bag draw ${rawRoll} − Pressure Penalty ${pressurePenalty} = modified ${finalRoll}`
+      : `raw bag draw ${rawRoll} (Pressure Penalty: 0) = modified ${finalRoll}`;
+
     body.playerInput += `\n\n[MANDATORY SYSTEM DIRECTIVE: The player has typed Proceed.
-    [SERVER MATH OVERRIDE]: The backend has rolled a modified ${finalRoll} on the 1d20 for the Morning Encounter.
+    [SERVER MATH OVERRIDE]: The backend has rolled ${rollBreakdown} on the 1d20 for the Morning Encounter.
     The resulting encounter is: ${encounter.name}.
     ${encounter.description}
     ${dcInstruction}
+
+    Resume Mode B Narrative Gameplay by generating the morning scene using these exact server-provided facts. ${dcRecalc}
+    [SEQUENCING GATE]: You must present the encounter and then IMMEDIATELY STOP. Do NOT narrate the player's reaction, do NOT resolve the survival check, and do NOT move the player. End your response by asking the player what they do.
+    [STAMINA GUARD]: Inspect the [DAILY SAVE LOG]. Deduct the -2 Morning Wake-Up stamina cost ONLY ONCE. If the Save Log says "(-2 pending at Proceed)", deduct -2 now. If the Save Log ALREADY deducted the -2 morning cost when saving, DO NOT deduct it a second time!
+    [FORMATTING LOCK]: You MUST include the exact "Stat Tracker: Stm [X/10]..." line inside your OOC block, reflecting the accurate morning stamina.]`;
 
     Resume Mode B Narrative Gameplay by generating the morning scene using these exact server-provided facts. ${dcRecalc}
     [SEQUENCING GATE]: You must present the encounter and then IMMEDIATELY STOP. Do NOT narrate the player's reaction, do NOT resolve the survival check, and do NOT move the player. End your response by asking the player what they do.
