@@ -87,7 +87,7 @@ export function buildSystemPrompt(
 
   const extrasWithContent = extras.filter((e) => e.content.trim().length > 0);
   const extrasSection = extrasWithContent.length > 0
-    ? `## Extras (Player-Customized Content)\nThe player has added the following custom content to their game. Incorporate it as appropriate:\n\n${
+    ? `## Extras (Player-Customized Content)\nThe player has added the following custom content to their game. Incorporate it as appropriate. If the player sings or hums a piece listed under Songs & Chants, weave in or quote their exact saved lyrics rather than inventing replacement lyrics.\n\n${
         extrasWithContent
           .map((e) => `### ${e.title} [${e.category}]\n${e.content}`)
           .join("\n\n")

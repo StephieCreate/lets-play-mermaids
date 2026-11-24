@@ -20,7 +20,7 @@ const CORE_RULE_SLUGS = [
 ];
 
 const EXTRAS_CATEGORIES =
-  "General, Custom Mechanic, Homebrew Item, NPC Detail, Location Detail, Lore, Reference, Temporary Content";
+  "General, Custom Mechanic, Homebrew Item, NPC Detail, Location Detail, Lore, Songs & Chants (value: songs), Reference, Temporary Content";
 
 // Same provider/model mapping the game uses so the player's bound model works.
 const PROVIDER_MODELS: Record<string, string> = {

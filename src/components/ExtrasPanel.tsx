@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   Plus, Trash2, Check, ChevronDown, ChevronRight, Loader2,
-  LockKeyhole, Box, Edit3, Power, X,
+  LockKeyhole, Box, Edit3, Power, X, Music,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -26,6 +26,7 @@ const CATEGORIES = [
   { value: 'npc-detail', label: 'NPC Detail' },
   { value: 'location-detail', label: 'Location Detail' },
   { value: 'lore', label: 'Lore' },
+  { value: 'songs', label: 'Songs & Chants' },
   { value: 'reference', label: 'Reference' },
   { value: 'temporary', label: 'Temporary Content' },
 ] as const;
@@ -337,7 +338,14 @@ export default function ExtrasPanel({ playthroughId, onSignIn }: ExtrasPanelProp
                         className="min-w-0 flex-1 truncate text-left"
                       >
                         <span className="block truncate text-sm font-medium text-pearl">{e.title}</span>
-                        <span className="mt-0.5 block text-xs text-muted/70">{categoryLabel(e.category)}</span>
+                        {e.category === 'songs' ? (
+                          <span className="mt-0.5 inline-flex items-center gap-1 rounded-full border border-abyss-400/40 bg-abyss-700/40 px-2 py-0.5 text-xs font-medium text-abyss-200">
+                            <Music className="h-3 w-3" />
+                            Songs & Chants
+                          </span>
+                        ) : (
+                          <span className="mt-0.5 block text-xs text-muted/70">{categoryLabel(e.category)}</span>
+                        )}
                       </button>
                       <button
                         onClick={() => handleToggleActive(e.id, e.is_active)}
