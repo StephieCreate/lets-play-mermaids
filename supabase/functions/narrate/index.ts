@@ -32,6 +32,7 @@ import {
   SCENE_ANALYSIS_PATTERN,
   applyStatUpdatesFromNarration,
   enforceAquaticAnatomy,
+  sanitizeMarkdownLayout,
 } from "./postProcessing.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
@@ -457,7 +458,7 @@ Deno.serve(async (req: Request) => {
     // ---- 8. Post-process the narration ----
     const data = await aiResponse!.json();
     const rawNarration: string = extractNarration(activeKey.provider, data).replace(SCENE_ANALYSIS_PATTERN, "").trim();
-    const narration: string = enforceAquaticAnatomy(rawNarration);
+    const narration: string = sanitizeMarkdownLayout(enforceAquaticAnatomy(rawNarration));
 
     if (!narration) {
       return new Response(

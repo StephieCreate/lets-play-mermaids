@@ -1,6 +1,39 @@
 export const SCENE_ANALYSIS_PATTERN = /<scene_analysis>[\s\S]*?<\/scene_analysis>\s*/gi;
 
 /**
+ * Non-Destructive Markdown Sanitizer: repairs ONLY syntax that breaks rendering.
+ * - Unwraps accidental bold around headings: **### Title** -> ### Title
+ * - Ensures a space after heading hashes: ###Title -> ### Title
+ * - Guarantees clean blank-line separation around headings
+ * NEVER touches heading levels, bold field labels, nested bullets, dividers,
+ * or fenced code blocks (their contents pass through untouched).
+ */
+export function sanitizeMarkdownLayout(text: string): string {
+  // Protect fenced code blocks from all rewrites
+  const fenceRegex = /```[\s\S]*?```|~~~[\s\S]*?~~~/g;
+  const fences: string[] = [];
+  let working = text.replace(fenceRegex, (fence) => {
+    fences.push(fence);
+    return `\u0000FENCE${fences.length - 1}\u0000`;
+  });
+
+  // 1. Unwrap bold around headings: **### Title** / **## Title** etc.
+  working = working.replace(/\*\*\s*(#{1,6}\s+[^\n*]+?)\s*\*\*/g, "$1");
+
+  // 2. Ensure a space after heading hashes (but keep fences protected)
+  working = working.replace(/^(#{1,6})([^#\s\n])/gm, "$1 $2");
+
+  // 3. Blank line above headings (except at start / after another heading)
+  working = working.replace(/([^\n\u0000])\n(#{1,6}\s)/g, "$1\n\n$2");
+
+  // 4. Blank line below headings (heading line followed by non-blank text)
+  working = working.replace(/(^#{1,6}[^\n]*\n)(?=[^\n\u0000])/gm, "$1\n");
+
+  // Restore fenced code blocks
+  return working.replace(/\u0000FENCE(\d+)\u0000/g, (_, i: string) => fences[parseInt(i, 10)]);
+}
+
+/**
  * Backend Anatomy & Buoyancy Gate: Scrubs accidental human/bipedal nouns and
  * standing/walking verbs out of the AI's response and replaces them with
  * merfolk/aquatic equivalents (floating, treading, drifting, hovering, tail/fluke).

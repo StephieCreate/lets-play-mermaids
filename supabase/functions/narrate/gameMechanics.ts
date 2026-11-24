@@ -494,7 +494,7 @@ export function applyCommandInterceptors(body: NarrateRequest): string {
     [FORMATTING LOCK]: You MUST include the exact "Stat Tracker: Stm [X/10]..." line inside your OOC block, reflecting the accurate morning stamina.`;
   }
   else if (isSummaryRequest(body.playerInput)) {
-    body.playerInput += `\n\n[MANDATORY SYSTEM DIRECTIVE FOR NARRATIVE SUMMARY]:\nThe player has commanded a summary. You MUST summarize the specific events, encounters, and dialogue of the CURRENT IN-GAME DAY ONLY. Base your summary 100% on the active chat history. Output in a clean Markdown code block formatted strictly according to the Tab 3 specifications with zero conversational filler.`;
+    body.playerInput += `\n\n[MANDATORY SYSTEM DIRECTIVE FOR NARRATIVE SUMMARY]:\nThe player has commanded a summary. You MUST summarize the specific events, encounters, and dialogue of the CURRENT IN-GAME DAY ONLY. Base your summary 100% on the active chat history. Output in a clean Markdown code block with zero conversational filler. Follow the MODULE A: THE NARRATIVE SUMMARY template supplied in this turn's <dynamic_turn_rules> VERBATIM: reproduce its exact heading hierarchy (#, ##, ###, ####) and bold field labels exactly as written — NEVER wrap Markdown heading hashes in bold (e.g., never print **### Title**), NEVER drop the space after heading hashes, and NEVER omit the required blank lines between sections.`;
   }
 
   else if (isSaveRequest(body.playerInput)) {

@@ -401,9 +401,9 @@ export function extractRecentDaysTopDown(content: string, playerInput: string, d
     }
   }
 
-  let finalContent = recentChunks.join("\n");
+  let finalContent = recentChunks.join("\n\n");
   if (pulledOlderChunks.length > 0) {
-    finalContent += "\n\n### Referenced Past History\n" + pulledOlderChunks.join("\n");
+    finalContent += "\n\n### Referenced Past History\n\n" + pulledOlderChunks.join("\n\n");
   }
 
   return finalContent.trim();

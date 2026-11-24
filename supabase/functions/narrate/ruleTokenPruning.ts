@@ -23,6 +23,8 @@ interface PruningTurnMessage {
   content: string;
 }
 
+import { isSummaryRequest, isSaveRequest } from "./gameMechanics.ts";
+
 // Blueprint for all the game data passed in from index.ts
 export interface PruningContext {
   playerInput: string;                        // What the player typed this turn
@@ -366,10 +368,21 @@ export function getDynamicTurnRules(
 
   const twoWayRadar = `${cleanPlayerInput}\n${recentAiTurns}\n${(ctx.currentScene ?? "").toLowerCase()}`;
 
-  // Detect modular bookkeeping & GM Q&A commands
-  const isSaveProgressCmd = /\b(save progress|save my progress|generate save|daily save log)\b/i.test(cleanPlayerInput);
-  const isSummaryCmd = /\b(give me a summary|generate a summary|narrative summary|summary of today)\b/i.test(cleanPlayerInput);
-  const isUpdateRegisterCmd = /\b(update register|grotto register|update my register)\b/i.test(cleanPlayerInput);
+  // Detect modular bookkeeping & GM Q&A commands.
+  // SINGLE SOURCE OF TRUTH: reuse gameMechanics' exact matchers against the raw
+  // player input (which includes any SERVER-directive text appended by
+  // applyCommandInterceptors) so Zone 2 fires 100% of the time gameMechanics
+  // recognizes a Summary/Save/Register turn — zero detector drift.
+  const isSummaryCmd =
+    isSummaryRequest(rawPlayerInput) ||
+    isSummaryRequest(cleanPlayerInput) ||
+    rawPlayerInput.includes("SYSTEM DIRECTIVE FOR NARRATIVE SUMMARY");
+  const isSaveProgressCmd =
+    isSaveRequest(rawPlayerInput) ||
+    isSaveRequest(cleanPlayerInput) ||
+    rawPlayerInput.includes("SYSTEM DIRECTIVE FOR DAILY SAVE LOG");
+  const isUpdateRegisterCmd = /\b(update register|grotto register|update my register)\b/i.test(cleanPlayerInput) ||
+    rawPlayerInput.includes("GROTTO REGISTER");
   const isSleepCmd = /\b(i go to sleep|go to sleep|i am ending the day|i fall asleep|sleep for the night|retire for the night|bed down)\b/i.test(cleanPlayerInput);
   const isBookkeepingCmd = isSaveProgressCmd || isSummaryCmd || isUpdateRegisterCmd || isSleepCmd;
 
@@ -392,7 +405,9 @@ export function getDynamicTurnRules(
   // 1. ON-DEMAND TEMPLATES (Save Progress / Summary / Update Register)
   // --------------------------------------------------------------------------
   const rawTemplates = rawRulesBySlug["universal-game-templates"] ?? "";
-  if (rawTemplates && frozen.hasStartedGame && (isSaveProgressCmd || isSummaryCmd || isUpdateRegisterCmd)) {
+  // NOTE: no hasStartedGame gate — a Day 1 player may request a summary before
+  // their first save, and Zone 2 is per-turn output so it never pollutes Zone 1.
+  if (rawTemplates && (isSaveProgressCmd || isSummaryCmd || isUpdateRegisterCmd)) {
     const requestedTemplate = extractRequestedTemplateZone2(rawTemplates, frozen, {
       isSaveProgressCmd,
       isSummaryCmd,
