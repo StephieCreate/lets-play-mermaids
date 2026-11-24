@@ -79,7 +79,7 @@ Deno.serve(async (req: Request) => {
     // ---- 1. COMMAND INTERCEPTORS & STATE MACHINE ----
     // (Nightly Halt Markov weather, Encounter Bag on Proceed, Summary/Save
     // directives, and the Standby Roll Protocol)
-    const currentGameState = applyCommandInterceptors(body);
+    const currentGameState = applyCommandInterceptors(body, dailySaveLog);
     body.storyState["game_mode"] = currentGameState;
 
     // ---- 2. Resolve the user's active AI key (BYOK, any provider) ----
