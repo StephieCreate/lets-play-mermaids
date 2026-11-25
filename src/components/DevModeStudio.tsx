@@ -128,7 +128,7 @@ export default function DevModeStudio() {
 
   const [attachedIds, setAttachedIds] = useState<Set<string>>(new Set());
   const [cartridge, setCartridge] = useState<CartridgeSnapshot | null>(null);
-  const [baseline, setBaseline] = useState<Record<string, string>>(() => loadBaseline());
+  const [baseline] = useState<Record<string, string>>(() => loadBaseline());
 
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatHistoryLoading, setChatHistoryLoading] = useState(true);
@@ -147,7 +147,7 @@ export default function DevModeStudio() {
 
   // ---- Data loading ----
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       setFiles([]);
       setLoading(false);
       return;
@@ -301,35 +301,9 @@ export default function DevModeStudio() {
     [cartridge, files],
   );
 
-  if (!isAdmin || !user) return null;
-
-  const toggleAttached = (id: string) => {
-    setAttachedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const selectAllCore = () => {
-    setAttachedIds((prev) => {
-      const next = new Set(prev);
-      for (const f of coreRuleFiles) next.add(f.id);
-      return next;
-    });
-  };
-
-  const clearAll = () => setAttachedIds(new Set());
-
-  const handleSaveRuleContent = (dbId: string, kind: 'rule' | 'apex', content: string) => {
-    setFiles((prev) =>
-      prev.map((f) => (f.dbId === dbId && f.kind === kind ? { ...f, content, updatedAt: new Date().toISOString() } : f)),
-    );
-  };
-
   const sendChat = useCallback(
-    async (history: ChatMessage[], rawInput: string): Promise<boolean> => {
+    async (history: ChatMessage[]): Promise<boolean> => {
+      if (!user) return false;
       setChatSending(true);
       setChatError(null);
       const controller = new AbortController();
@@ -396,6 +370,40 @@ export default function DevModeStudio() {
     [attachedFiles, user],
   );
 
+  if (!isAdmin || !user) return null;
+
+  const autoGrowInput = () => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 112)}px`;
+  };
+
+  const toggleAttached = (id: string) => {
+    setAttachedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllCore = () => {
+    setAttachedIds((prev) => {
+      const next = new Set(prev);
+      for (const f of coreRuleFiles) next.add(f.id);
+      return next;
+    });
+  };
+
+  const clearAll = () => setAttachedIds(new Set());
+
+  const handleSaveRuleContent = (dbId: string, kind: 'rule' | 'apex', content: string) => {
+    setFiles((prev) =>
+      prev.map((f) => (f.dbId === dbId && f.kind === kind ? { ...f, content, updatedAt: new Date().toISOString() } : f)),
+    );
+  };
+
   const handleSend = () => {
     const text = chatInput.trim();
     if (!text || chatSending || !user) return;
@@ -409,7 +417,7 @@ export default function DevModeStudio() {
       if (savedId) {
         setChatMessages((prev) => prev.map((m) => (m === optimistic ? { ...m, id: savedId } : m)));
       }
-      const aborted = await sendChat(nextHistory, text);
+      const aborted = await sendChat(nextHistory);
       if (aborted) {
         setChatInput(text);
         if (inputRef.current) inputRef.current.style.height = 'auto';
@@ -435,6 +443,7 @@ export default function DevModeStudio() {
     setConfirmClear(false);
     setChatError(null);
     setChatInput('');
+    if (inputRef.current) inputRef.current.style.height = 'auto';
     await clearChatMessages(user.id);
   };
 
@@ -476,14 +485,10 @@ export default function DevModeStudio() {
     ].join('\n');
     setStudioTab('chat');
     setChatInput(auditPrompt);
-    inputRef.current?.focus();
-  };
-
-  const autoGrowInput = () => {
-    const el = inputRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
+    window.setTimeout(() => {
+      autoGrowInput();
+      inputRef.current?.focus();
+    }, 0);
   };
 
   const starterChats = [
@@ -497,52 +502,95 @@ export default function DevModeStudio() {
     <button
       type="button"
       onClick={() => setStudioTab(tab)}
-      className={`inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl px-3 text-xs font-semibold transition-all sm:text-sm ${
+      className={`inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-xl px-2 py-1.5 text-xs font-semibold leading-tight transition-all sm:min-h-10 sm:gap-2 sm:px-3 sm:text-sm ${
         studioTab === tab
           ? 'bg-amber-500/20 text-amber-200 ring-1 ring-amber-400/40'
           : 'text-muted hover:bg-abyss-800/40 hover:text-pearl'
       }`}
     >
       {icon}
-      <span>{label}</span>
+      <span className="truncate">{label}</span>
     </button>
   );
 
   return (
-    <section className="space-y-4">
-      <div className="glass-panel rounded-2xl border-amber-400/25 p-4 sm:p-5">
-        <div className="mb-4 flex flex-wrap items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 text-amber-300">
-            <Terminal className="h-5 w-5" />
+    <section className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden">
+      {/* PINNED COMPACT DEV MODE HEADER & SUB-TABS */}
+      <div className="shrink-0 border-b border-amber-400/20 bg-abyss-950/85 px-3 py-2 backdrop-blur-xl sm:px-5 sm:py-3 lg:mb-3 lg:rounded-2xl lg:border lg:glass-panel">
+        <div className="mb-2 flex items-center justify-between gap-2 sm:mb-3">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+            <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-300 sm:flex">
+              <Terminal className="h-5 w-5" />
+            </div>
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 sm:block">
+              <h2 className="shrink-0 font-display text-base font-semibold leading-tight text-pearl sm:text-xl">
+                Dev Mode Studio
+              </h2>
+              <p className="truncate text-[11px] leading-snug text-amber-200/75 sm:text-xs">
+                Admin-only workspace — hidden from regular players.
+              </p>
+            </div>
           </div>
-          <div className="min-w-0">
-            <h2 className="font-display text-2xl font-semibold text-pearl">Dev Mode Studio</h2>
-            <p className="text-xs text-amber-200/75">
-              Admin-only workspace — completely hidden from regular players.
-            </p>
-          </div>
+
+          {studioTab === 'chat' && (
+            confirmClear ? (
+              <div className="flex shrink-0 items-center gap-1.5">
+                <span className="text-xs text-coral-300">Clear?</span>
+                <button
+                  type="button"
+                  onClick={clearChat}
+                  className="rounded-lg bg-coral-500/25 px-2 py-1 text-xs font-semibold text-coral-200 transition-colors hover:bg-coral-500/40"
+                >
+                  Yes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmClear(false)}
+                  className="rounded-lg border border-abyss-400/30 px-2 py-1 text-xs font-medium text-muted transition-colors hover:text-pearl"
+                >
+                  No
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmClear(true)}
+                disabled={chatMessages.length === 0}
+                className="inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-lg border border-abyss-500/35 bg-abyss-800/40 px-2.5 py-1 text-xs font-medium text-muted transition-colors hover:text-pearl disabled:opacity-40 sm:min-h-9 sm:px-3"
+                title="Clear Dev Chat"
+              >
+                <Eraser className="h-3.5 w-3.5" />
+                <span>Clear</span>
+              </button>
+            )
+          )}
         </div>
-        <div className="flex items-center gap-1.5 rounded-xl bg-abyss-950/40 p-1">
-          {studioTabBtn('viewer', <Files className="h-4 w-4" />, 'Rule Viewer')}
-          {studioTabBtn('scanner', <ScanLine className="h-4 w-4" />, 'Version Scanner')}
-          {studioTabBtn('chat', <MessageSquare className="h-4 w-4" />, 'Dev Chat')}
+
+        <div className="flex items-center gap-1.5 rounded-xl bg-abyss-950/50 p-1">
+          {studioTabBtn('viewer', <Files className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />, 'Rule Viewer')}
+          {studioTabBtn('scanner', <ScanLine className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />, 'Version Scanner')}
+          {studioTabBtn('chat', <MessageSquare className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />, 'Dev Chat')}
         </div>
       </div>
 
       {loading && (
-        <div className="glass-panel flex items-center justify-center gap-2 rounded-2xl p-10 text-sm text-muted">
-          <Loader2 className="h-5 w-5 animate-spin" />
-          Loading your rule files...
+        <div className="flex min-h-0 flex-1 items-center justify-center p-4">
+          <div className="glass-panel flex items-center justify-center gap-2 rounded-2xl px-8 py-6 text-sm text-muted">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            Loading your rule files...
+          </div>
         </div>
       )}
 
       {!loading && loadError && (
-        <div className="glass-panel rounded-2xl border-coral-500/30 p-5 text-sm text-coral-300">{loadError}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-5 lg:p-0">
+          <div className="glass-panel rounded-2xl border-coral-500/30 p-5 text-sm text-coral-300">{loadError}</div>
+        </div>
       )}
 
-      {/* ---------- VIEWER ---------- */}
+      {/* ---------- VIEWER (SCROLLABLE MIDDLE PANE) ---------- */}
       {!loading && !loadError && studioTab === 'viewer' && (
-        <div className="space-y-3">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3 sm:px-5 sm:py-4 lg:px-0 lg:py-0">
           <div className="glass-panel flex flex-wrap items-center gap-2 rounded-2xl p-3">
             <button
               type="button"
@@ -590,9 +638,9 @@ export default function DevModeStudio() {
         </div>
       )}
 
-      {/* ---------- SCANNER ---------- */}
+      {/* ---------- SCANNER (SCROLLABLE MIDDLE PANE) ---------- */}
       {!loading && !loadError && studioTab === 'scanner' && (
-        <div className="space-y-3">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3 sm:px-5 sm:py-4 lg:px-0 lg:py-0">
           <div className="glass-panel flex flex-wrap items-center justify-between gap-3 rounded-2xl p-4">
             <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-abyss-300/70">
@@ -669,44 +717,14 @@ export default function DevModeStudio() {
         </div>
       )}
 
-      {/* ---------- DEV CHAT ---------- */}
+      {/* ---------- DEV CHAT (ONLY MESSAGE FEED SCROLLS; COMPOSER PINNED) ---------- */}
       {!loading && !loadError && studioTab === 'chat' && (
-        <div className="glass-panel flex flex-col rounded-2xl p-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-abyss-300/70">
-              AI Developer Assistant
-            </p>
-            <button
-              type="button"
-              onClick={() => setConfirmClear(true)}
-              disabled={chatMessages.length === 0}
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-abyss-500/35 bg-abyss-800/40 px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:text-pearl disabled:opacity-40"
-            >
-              <Eraser className="h-3.5 w-3.5" />
-              New Chat / Clear
-            </button>
-            {confirmClear && (
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-coral-300">Clear all?</span>
-                <button
-                  type="button"
-                  onClick={clearChat}
-                  className="rounded-lg bg-coral-500/25 px-2.5 py-1.5 text-xs font-semibold text-coral-200 transition-colors hover:bg-coral-500/40"
-                >
-                  Yes
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmClear(false)}
-                  className="rounded-lg border border-abyss-400/30 px-2.5 py-1.5 text-xs font-medium text-muted transition-colors hover:text-pearl"
-                >
-                  No
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div ref={feedRef} className="max-h-[62vh] min-h-[20rem] min-w-0 space-y-3 overflow-y-auto pr-1">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:glass-panel lg:rounded-2xl">
+          {/* ONLY SCROLLABLE CHAT FEED */}
+          <div
+            ref={feedRef}
+            className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3 sm:px-5 sm:py-4"
+          >
             {chatHistoryLoading ? (
               <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -714,117 +732,134 @@ export default function DevModeStudio() {
               </div>
             ) : (
               <>
-            {chatMessages.length === 0 && !chatSending && (
-              <div className="rounded-xl border border-dashed border-abyss-600/40 bg-abyss-950/30 p-5 text-center">
-                <p className="mb-3 text-sm text-muted">
-                  Chat freely about rules, lore, balance, and edits. Attach files in the Rule Viewer
-                  first so the assistant can read them.
-                </p>
-                <div className="flex flex-wrap justify-center gap-2">
-                  {starterChats.map((chip) => (
-                    <button
-                      key={chip}
-                      type="button"
-                      onClick={() => setChatInput(chip)}
-                      className="rounded-full border border-foam-400/30 bg-foam-900/20 px-3 py-1.5 text-xs font-medium text-foam-200 transition-colors hover:bg-foam-900/40"
-                    >
-                      {chip}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {chatMessages.map((message, idx) => (
-              <div
-                key={message.id ?? `local-${idx}`}
-                className={`group relative min-w-0 rounded-2xl border p-4 sm:p-5 ${
-                  message.role === 'user'
-                    ? 'border-abyss-400/30 bg-abyss-600/20'
-                    : 'border-abyss-600/30 bg-abyss-950/40'
-                } ${message.deleting ? 'opacity-40 pointer-events-none' : ''}`}
-              >
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <p
-                    className={`text-xs font-semibold uppercase tracking-[0.16em] ${
-                      message.role === 'user' ? 'text-abyss-200/70' : 'text-amber-200/70'
-                    }`}
-                  >
-                    {message.role === 'user' ? 'You' : 'Dev Assistant'}
-                  </p>
-                  <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-                    <button
-                      type="button"
-                      onClick={() => copyMessage(message.content, idx)}
-                      className="flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-abyss-700/50 hover:text-pearl"
-                      title="Copy message"
-                      aria-label="Copy message"
-                    >
-                      {copiedIndex === idx ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void deleteMessage(idx)}
-                      disabled={message.deleting}
-                      className="flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-coral-900/30 hover:text-coral-300 disabled:opacity-40"
-                      title="Delete message"
-                      aria-label="Delete message"
-                    >
-                      {message.deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                    </button>
-                  </div>
-                </div>
-                {message.role === 'user' ? (
-                  <p
-                    className={`whitespace-pre-wrap break-words leading-relaxed text-pearl/90 ${fontFamilyClass}`}
-                    style={{ fontSize: fontPx }}
-                  >
-                    {message.content}
-                  </p>
-                ) : (
-                  <div className={`min-w-0 ${fontFamilyClass}`} style={{ fontSize: fontPx }}>
-                    <MarkdownChat content={message.content} />
+                {chatMessages.length === 0 && !chatSending && (
+                  <div className="rounded-xl border border-dashed border-abyss-600/40 bg-abyss-950/30 p-4 text-center sm:p-5">
+                    <p className="mb-3 text-sm text-muted">
+                      Chat freely about rules, lore, balance, and edits. Attach files in the Rule Viewer
+                      first so the assistant can read them.
+                    </p>
+                    <div className="flex flex-wrap justify-center gap-2">
+                      {starterChats.map((chip) => (
+                        <button
+                          key={chip}
+                          type="button"
+                          onClick={() => {
+                            setChatInput(chip);
+                            window.setTimeout(() => {
+                              autoGrowInput();
+                              inputRef.current?.focus();
+                            }, 0);
+                          }}
+                          className="rounded-full border border-foam-400/30 bg-foam-900/20 px-3 py-1.5 text-xs font-medium text-foam-200 transition-colors hover:bg-foam-900/40"
+                        >
+                          {chip}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
-              </div>
-            ))}
 
+                {chatMessages.map((message, idx) => (
+                  <div
+                    key={message.id ?? `local-${idx}`}
+                    className={`group relative min-w-0 rounded-2xl border p-3.5 sm:p-5 ${
+                      message.role === 'user'
+                        ? 'border-abyss-400/30 bg-abyss-600/20'
+                        : 'border-abyss-600/30 bg-abyss-950/40'
+                    } ${message.deleting ? 'pointer-events-none opacity-40' : ''}`}
+                  >
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p
+                        className={`text-xs font-semibold uppercase tracking-[0.16em] ${
+                          message.role === 'user' ? 'text-abyss-200/70' : 'text-amber-200/70'
+                        }`}
+                      >
+                        {message.role === 'user' ? 'You' : 'Dev Assistant'}
+                      </p>
+                      <div className="flex shrink-0 items-center gap-0.5 opacity-75 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100">
+                        <button
+                          type="button"
+                          onClick={() => copyMessage(message.content, idx)}
+                          className="flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-abyss-700/50 hover:text-pearl"
+                          title="Copy message"
+                          aria-label="Copy message"
+                        >
+                          {copiedIndex === idx ? (
+                            <Check className="h-4 w-4 text-emerald-400" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void deleteMessage(idx)}
+                          disabled={message.deleting}
+                          className="flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-coral-900/30 hover:text-coral-300 disabled:opacity-40"
+                          title="Delete message"
+                          aria-label="Delete message"
+                        >
+                          {message.deleting ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                    {message.role === 'user' ? (
+                      <p
+                        className={`whitespace-pre-wrap break-words leading-relaxed text-pearl/90 ${fontFamilyClass}`}
+                        style={{ fontSize: fontPx }}
+                      >
+                        {message.content}
+                      </p>
+                    ) : (
+                      <div className={`min-w-0 break-words ${fontFamilyClass}`} style={{ fontSize: fontPx }}>
+                        <MarkdownChat content={message.content} />
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {chatSending && (
+                  <div className="rounded-2xl border border-abyss-600/30 bg-abyss-950/40 p-4 sm:p-5">
+                    <div className="flex items-center gap-2 text-sm text-muted">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      The Dev Assistant is thinking...
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* PINNED BOTTOM COMPOSER */}
+          <div className="shrink-0 border-t border-abyss-700/35 bg-abyss-950/90 px-3 py-2 backdrop-blur-xl sm:px-5 sm:py-3 lg:bg-abyss-950/40 lg:backdrop-blur-none">
             {chatError && (
-              <div className="mt-3 flex items-start gap-2 rounded-xl border border-coral-500/30 bg-coral-900/20 px-3.5 py-2.5 text-sm text-coral-200">
+              <div className="mb-2 flex items-start gap-2 rounded-xl border border-coral-500/30 bg-coral-900/20 px-3 py-2 text-xs text-coral-200 sm:text-sm">
                 <X className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>{chatError}</span>
               </div>
             )}
 
-            {chatSending && (
-              <div className="rounded-2xl border border-abyss-600/30 bg-abyss-950/40 p-4 sm:p-5">
-                <div className="flex items-center gap-2 text-sm text-muted">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  The Dev Assistant is thinking...
-                </div>
-              </div>
-            )}
-              </>
-            )}
-          </div>
+            <div className="mb-1.5 flex items-center gap-2 text-[11px] text-muted">
+              <span className="shrink-0">
+                <strong className="text-pearl">{attachedFiles.length}</strong> file
+                {attachedFiles.length === 1 ? '' : 's'} · ~{attachedTokens.toLocaleString()} tok
+              </span>
+              <button
+                type="button"
+                onClick={() => setStudioTab('viewer')}
+                className="shrink-0 rounded-full border border-abyss-500/40 px-2 py-0.5 font-medium text-abyss-200 transition-colors hover:text-pearl"
+              >
+                Files
+              </button>
+              {activeModelLabel && (
+                <span className="ml-auto truncate text-muted/80">{activeModelLabel}</span>
+              )}
+            </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-abyss-700/30 bg-abyss-950/40 px-3 py-2 text-[11px] text-muted">
-            <span>
-              <strong className="text-pearl">{attachedFiles.length}</strong> file
-              {attachedFiles.length === 1 ? '' : 's'} attached · ~{attachedTokens.toLocaleString()} tokens
-            </span>
-            <button
-              type="button"
-              onClick={() => setStudioTab('viewer')}
-              className="rounded-full border border-abyss-500/40 px-2 py-0.5 font-medium text-abyss-200 transition-colors hover:text-pearl"
-            >
-              Toggle attached files
-            </button>
-            {activeModelLabel && <span className="ml-auto truncate">Responding with: {activeModelLabel}</span>}
-          </div>
-
-          <div className="mt-2 min-w-0">
-            <div className="relative">
+            <div className="relative min-w-0">
               <textarea
                 ref={inputRef}
                 value={chatInput}
@@ -833,19 +868,23 @@ export default function DevModeStudio() {
                   autoGrowInput();
                 }}
                 onKeyDown={(e) => handleChatKeyDown(e, handleSend)}
-                placeholder="Ask the Dev Assistant anything — Enter to send, Shift+Enter for a new line"
+                placeholder="Ask the Dev Assistant anything..."
                 rows={1}
-                className="min-h-12 max-h-44 w-full resize-none overflow-y-auto rounded-xl border border-abyss-600/40 bg-abyss-900/60 py-3 pl-4 pr-14 text-sm leading-relaxed text-pearl outline-none placeholder:text-muted/50 focus:border-abyss-400/60"
+                className="min-h-11 max-h-28 w-full resize-none overflow-y-auto rounded-xl border border-abyss-600/40 bg-abyss-900/70 py-2.5 pl-3.5 pr-12 text-sm leading-relaxed text-pearl outline-none placeholder:text-muted/50 focus:border-abyss-400/60"
               />
               <button
                 type="button"
                 onClick={chatSending ? () => abortControllerRef.current?.abort() : handleSend}
                 disabled={!chatSending && !chatInput.trim()}
-                className="absolute bottom-2.5 right-2.5 z-10 inline-flex h-7 w-7 items-center justify-center rounded-md text-pearl/70 transition-colors hover:bg-abyss-700/40 hover:text-pearl disabled:cursor-not-allowed disabled:opacity-40"
+                className="absolute bottom-2 right-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-lg text-pearl/75 transition-colors hover:bg-abyss-700/50 hover:text-pearl disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label={chatSending ? 'Stop response' : 'Send message'}
                 title={chatSending ? 'Stop generating' : 'Send (Enter)'}
               >
-                {chatSending ? <Square className="h-[18px] w-[18px] fill-current" /> : <Send className="h-[18px] w-[18px]" />}
+                {chatSending ? (
+                  <Square className="h-[18px] w-[18px] fill-current" />
+                ) : (
+                  <Send className="h-[18px] w-[18px]" />
+                )}
               </button>
             </div>
           </div>
