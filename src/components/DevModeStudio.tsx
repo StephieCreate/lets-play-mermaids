@@ -20,6 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useAiPreferences } from '@/context/AiPreferencesContext';
 import { useFontSettings } from '@/context/FontSettingsContext';
 import { supabase } from '@/lib/supabase';
 import { handleChatKeyDown } from '@/lib/deviceInput';
@@ -213,6 +214,7 @@ function buildSnippet(text: string, queryLower: string): string {
 
 export default function DevModeStudio() {
   const { user, isAdmin } = useAuth();
+  const { activePreference } = useAiPreferences();
   const { fontFamilyClass, fontPx } = useFontSettings();
 
   const [studioTab, setStudioTab] = useState<StudioTab>('tools');
@@ -502,7 +504,10 @@ export default function DevModeStudio() {
           .eq('is_active', true)
           .maybeSingle();
         if (activeKeyRow?.id) {
-          chosenModel = localStorage.getItem(`model_pref_${activeKeyRow.id}`) ?? undefined;
+          chosenModel =
+            (activePreference?.provider && activePreference.model
+              ? activePreference.model
+              : localStorage.getItem(`model_pref_${activeKeyRow.id}`)) ?? undefined;
         }
 
         let payloadBytes = 0;
@@ -548,7 +553,7 @@ export default function DevModeStudio() {
       }
       return false;
     },
-    [attachedFiles, user],
+    [attachedFiles, user, activePreference],
   );
 
   if (!isAdmin || !user) return null;

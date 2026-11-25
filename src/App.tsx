@@ -3,6 +3,7 @@ import { Key, Type, Shield, Bug, Sparkles, Check, MessageCircle } from 'lucide-r
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { FontSettingsProvider } from '@/context/FontSettingsContext';
+import { AiPreferencesProvider } from '@/context/AiPreferencesContext';
 import OceanBackground from '@/components/OceanBackground';
 import Header, { type AppTab } from '@/components/Header';
 import Hero from '@/components/Hero';
@@ -533,9 +534,11 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <FontSettingsProvider>
-        <AppContent />
-      </FontSettingsProvider>
+      <AiPreferencesProvider>
+        <FontSettingsProvider>
+          <AppContent />
+        </FontSettingsProvider>
+      </AiPreferencesProvider>
     </AuthProvider>
   );
 }

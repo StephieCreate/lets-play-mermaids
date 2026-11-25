@@ -16,6 +16,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useAiPreferences } from '@/context/AiPreferencesContext';
 import { supabase } from '@/lib/supabase';
 
 type Provider = 'deepseek' | 'openai' | 'gemini' | 'claude' | 'custom';
@@ -106,6 +107,7 @@ const DEFAULT_PRICING: ModelOption = MODELS_BY_PROVIDER.deepseek[0];
 
 export default function AIConfiguration({ onSignIn }: AIConfigurationProps) {
   const { user } = useAuth();
+  const { activePreference, hydrated, savePreference } = useAiPreferences();
   const [keys, setKeys] = useState<SafeKeyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -130,14 +132,18 @@ export default function AIConfiguration({ onSignIn }: AIConfigurationProps) {
   const updateEstimator = useCallback(() => {
     const activeKey = keys.find((k) => k.is_active);
     if (activeKey) {
-      const storedModelId = localStorage.getItem(`model_pref_${activeKey.id}`);
+      // Supabase-backed preference wins over the localStorage cache once hydrated.
+      const savedModel = hydrated && activePreference?.provider === activeKey.provider
+        ? activePreference.model
+        : null;
+      const storedModelId = savedModel ?? localStorage.getItem(`model_pref_${activeKey.id}`);
       const providerModels = MODELS_BY_PROVIDER[activeKey.provider];
       const matchedModel = providerModels.find((m) => m.id === storedModelId) || providerModels[0];
       setActiveModelPricing(matchedModel);
     } else {
       setActiveModelPricing(DEFAULT_PRICING);
     }
-  }, [keys]);
+  }, [keys, hydrated, activePreference]);
 
   useEffect(() => {
     updateEstimator();
@@ -637,17 +643,36 @@ function KeyCard({
   onActivate,
   onToggleExclusion,
 }: KeyCardProps) {
+  const { user } = useAuth();
+  const { activePreference, hydrated, savePreference } = useAiPreferences();
   const info = PROVIDER_INFO[row.provider];
   const availableModels = MODELS_BY_PROVIDER[row.provider] || [];
 
+  // Initial value: Supabase-backed preference when it matches this key's provider,
+  // otherwise the local cache. Never write back until hydration finished.
   const [selectedModel, setSelectedModel] = useState<string>(() => {
+    if (hydrated && activePreference?.provider === row.provider && activePreference.model) {
+      return activePreference.model;
+    }
     return localStorage.getItem(`model_pref_${row.id}`) || availableModels[0]?.id;
   });
+
+  // Once Supabase resolves, adopt its saved model (prevents a provider change from
+  // resetting the model to a hardcoded default).
+  useEffect(() => {
+    if (!hydrated) return;
+    if (activePreference?.provider === row.provider && activePreference.model) {
+      setSelectedModel(activePreference.model);
+    }
+  }, [hydrated, activePreference, row.provider]);
 
   const handleModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newModelId = e.target.value;
     setSelectedModel(newModelId);
     localStorage.setItem(`model_pref_${row.id}`, newModelId);
+    if (user) {
+      void savePreference(user.id, row.provider, newModelId);
+    }
     window.dispatchEvent(new Event('model_pref_changed'));
   };
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { ArrowLeft, Send, Waves, BookOpen, ScrollText, Home, Sparkles, Box, Loader2, Trash2, AlertTriangle, X, Dices, Sun, Copy, Check, Bug, Minus, Plus, RefreshCw, Square } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useAiPreferences } from '@/context/AiPreferencesContext';
 import { supabase } from '@/lib/supabase';
 import type { Character, Playthrough } from '@/types/database';
 import { resolveApexName } from '@/lib/customApexes';
@@ -185,6 +186,7 @@ function parseStatsFromChatMessages(messages: ChatMessage[], current: ParsedStat
 
 export default function PlayScreen({ playthroughId, onBack, onSignIn, onReportBug }: PlayScreenProps) {
   const { user } = useAuth();
+  const { activePreference } = useAiPreferences();
   const { fontFamilyClass, fontPx } = useFontSettings();
   const [character, setCharacter] = useState<Character | null>(null);
   const [playthrough, setPlaythrough] = useState<Playthrough | null>(null);
@@ -506,7 +508,10 @@ export default function PlayScreen({ playthroughId, onBack, onSignIn, onReportBu
           .eq('is_active', true)
           .maybeSingle();
         if (activeKeyRow?.id) {
-          chosenModelId = localStorage.getItem(`model_pref_${activeKeyRow.id}`) ?? undefined;
+          chosenModelId =
+            (activePreference?.provider && activePreference.model
+              ? activePreference.model
+              : localStorage.getItem(`model_pref_${activeKeyRow.id}`)) ?? undefined;
         }
       }
 

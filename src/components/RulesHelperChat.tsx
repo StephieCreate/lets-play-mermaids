@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useAiPreferences } from '@/context/AiPreferencesContext';
 import { useFontSettings } from '@/context/FontSettingsContext';
 import { supabase } from '@/lib/supabase';
 import { handleChatKeyDown } from '@/lib/deviceInput';
@@ -264,6 +265,7 @@ function AssistantMarkdown({ content }: { content: string }) {
 
 export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) {
   const { user } = useAuth();
+  const { activePreference } = useAiPreferences();
   const { fontFamilyClass, fontPx } = useFontSettings();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -320,13 +322,19 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
       .maybeSingle()
       .then(({ data }) => {
         if (cancelled || !data) return;
-        const modelPref = localStorage.getItem(`model_pref_${data.id}`);
+        const savedPref =
+          activePreference !== null &&
+          activePreference.provider === data.provider &&
+          activePreference.model
+            ? activePreference.model
+            : null;
+        const modelPref = savedPref ?? localStorage.getItem(`model_pref_${data.id}`);
         setModelLabel(modelPref || data.label || data.provider || '');
       });
     return () => {
       cancelled = true;
     };
-  }, [userId]);
+  }, [userId, activePreference]);
 
   // Populate the Character Context picker with the player's saved characters
   useEffect(() => {
@@ -402,7 +410,10 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
           .eq('is_active', true)
           .maybeSingle();
         if (activeKeyRow?.id) {
-          aiModel = localStorage.getItem(`model_pref_${activeKeyRow.id}`) ?? undefined;
+          aiModel =
+            (activePreference?.provider && activePreference.model
+              ? activePreference.model
+              : localStorage.getItem(`model_pref_${activeKeyRow.id}`)) ?? undefined;
         }
 
         let requestType: string | undefined;
@@ -459,7 +470,7 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
       }
       return false;
     },
-    [user],
+    [user, activePreference],
   );
 
   const autoGrowInput = () => {
