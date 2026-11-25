@@ -1253,47 +1253,83 @@ export default function DevModeStudio() {
             {scanRows.length === 0 ? (
               <p className="p-6 text-center text-sm text-muted">No rule files to scan yet.</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[38rem] text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-abyss-700/30 text-[11px] uppercase tracking-[0.14em] text-abyss-300/70">
-                      <th className="px-4 py-3 font-semibold">Document</th>
-                      <th className="px-4 py-3 font-semibold">Version</th>
-                      <th className="px-4 py-3 font-semibold">Status</th>
-                      <th className="px-4 py-3 font-semibold">Recommended bump</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {scanRows.map((row) => (
-                      <tr key={row.file.id} className="border-b border-abyss-800/30 last:border-0">
-                        <td className="px-4 py-3">
-                          <p className="font-medium text-pearl">{row.file.title}</p>
-                          <p className="text-xs text-muted">{row.file.category}</p>
-                        </td>
-                        <td className="px-4 py-3 font-mono text-xs text-pearl">
+              <>
+                {/* MOBILE STACKED CARDS (zero horizontal cutoff) */}
+                <div className="divide-y divide-abyss-800/40 md:hidden">
+                  {scanRows.map((row) => (
+                    <div key={row.file.id} className="space-y-1.5 px-3.5 py-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-pearl">{row.file.title}</p>
+                          <p className="text-[11px] text-muted">{row.file.category}</p>
+                        </div>
+                        {row.status === 'unchanged' ? (
+                          <span className="shrink-0 rounded-full border border-emerald-400/30 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                            Unchanged
+                          </span>
+                        ) : row.status === 'modified' ? (
+                          <span className="shrink-0 rounded-full border border-amber-400/30 bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+                            Modified
+                          </span>
+                        ) : (
+                          <span className="shrink-0 rounded-full border border-coral-400/30 bg-coral-500/15 px-2 py-0.5 text-[10px] font-semibold text-coral-300">
+                            New
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between gap-2 text-xs">
+                        <span className="font-mono text-pearl">
                           {row.versionTag ? `v${row.versionTag}` : 'Untagged'}
-                        </td>
-                        <td className="px-4 py-3">
-                          {row.status === 'unchanged' ? (
-                            <span className="rounded-full border border-emerald-400/30 bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">
-                              Unchanged
-                            </span>
-                          ) : row.status === 'modified' ? (
-                            <span className="rounded-full border border-amber-400/30 bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300">
-                              Modified since last cartridge
-                            </span>
-                          ) : (
-                            <span className="rounded-full border border-coral-400/30 bg-coral-500/15 px-2 py-0.5 text-[11px] font-semibold text-coral-300">
-                              New / Not in cartridge
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 font-mono text-xs text-foam-300">{row.recommendation}</td>
+                        </span>
+                        <span className="truncate font-mono text-foam-300">{row.recommendation}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* TABLET & DESKTOP FULL TABLE */}
+                <div className="hidden overflow-x-auto md:block">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-abyss-700/30 text-[11px] uppercase tracking-[0.14em] text-abyss-300/70">
+                        <th className="px-4 py-3 font-semibold">Document</th>
+                        <th className="px-4 py-3 font-semibold">Version</th>
+                        <th className="px-4 py-3 font-semibold">Status</th>
+                        <th className="px-4 py-3 font-semibold">Recommended bump</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {scanRows.map((row) => (
+                        <tr key={row.file.id} className="border-b border-abyss-800/30 last:border-0">
+                          <td className="px-4 py-3">
+                            <p className="font-medium text-pearl">{row.file.title}</p>
+                            <p className="text-xs text-muted">{row.file.category}</p>
+                          </td>
+                          <td className="px-4 py-3 font-mono text-xs text-pearl">
+                            {row.versionTag ? `v${row.versionTag}` : 'Untagged'}
+                          </td>
+                          <td className="px-4 py-3">
+                            {row.status === 'unchanged' ? (
+                              <span className="rounded-full border border-emerald-400/30 bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">
+                                Unchanged
+                              </span>
+                            ) : row.status === 'modified' ? (
+                              <span className="rounded-full border border-amber-400/30 bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300">
+                                Modified since last cartridge
+                              </span>
+                            ) : (
+                              <span className="rounded-full border border-coral-400/30 bg-coral-500/15 px-2 py-0.5 text-[11px] font-semibold text-coral-300">
+                                New / Not in cartridge
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 font-mono text-xs text-foam-300">{row.recommendation}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         </div>
