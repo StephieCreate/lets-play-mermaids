@@ -489,10 +489,26 @@ export function applyCommandInterceptors(body: NarrateRequest, dailySaveLog = ""
     body.storyState["weather_streak"] = weatherStreak;
 
     // Explicitly hand the AI the final answer so it doesn't have to look it up
-    body.playerInput += `\n\n[MANDATORY SYSTEM DIRECTIVE: The player has initiated the Nightly Halt. The backend has rolled a ${weatherRoll} on the 1d10 for tomorrow's weather.
-    [SERVER MATH OVERRIDE]: Tomorrow's condition is ${weather.name}. Effect: ${weather.effect}.
-    [SAVE LOG WEATHER OVERWRITE]: You MUST overwrite the "Ocean Condition" line in the [DAILY SAVE LOG] with "${weather.name} — ${weather.effect}" and its exact modifiers. Do NOT recycle yesterday's weather: tomorrow's Proceed must use this freshly rolled condition, or the [WEATHER LOCK] will enforce the stale one.
-    Print the Weather Calculation block using these exact server-provided values, print the Maintenance Window prompt verbatim, and STOP. Do not generate narrative.]`;
+   // === [SEARCH: NIGHTLY HALT BEDTIME VIGNETTE & FRIENDLY GM] ===
+    // Order matters here: Vignette FIRST -> "---" wall -> Weather & Friendly GM LAST.
+    // Putting the system wall at the bottom prevents the AI from leaking into tomorrow morning.
+    body.playerInput += `\n\n[MANDATORY SYSTEM DIRECTIVE: The player has initiated the Nightly Halt.
+    [SERVER MATH OVERRIDE]: Tomorrow's weather roll is ${weatherRoll} on 1d10 -> Condition: ${weather.name}. Effect: ${weather.effect}.
+    [SAVE LOG WEATHER OVERWRITE]: Tomorrow's "Ocean Condition" is locked as "${weather.name} — ${weather.effect}". Do NOT recycle yesterday's weather.
+
+    Follow this EXACT two-part structure and then STOP:
+
+    PART 1 — CLOSING BEDTIME VIGNETTE (1–2 short paragraphs ONLY):
+    - If the player wrote bedtime roleplay (a nightmare, restlessness, sleepily seeking out the Primary Mate, etc.), respond directly to their scene as they drift off and show a brief, quiet glimpse of the Apex's reaction.
+    - If they kept it brief, give a quiet camera pan showing what the Apex does as the player sleeps (watching the entrance, pacing, settling closer) OR—only occasionally, when it feels earned—drop a subtle atmospheric tease of something moving in the dark outside that the character sleeps through.
+    - [NO MIND-READING GUARD]: NPCs cannot read unspoken thoughts or dreams; they may only react to observable physical cues (shivering, gill rhythm, distressed scent, shifting closer) or quoted dialogue.
+    - [FADE-TO-BLACK FENCE]: Stay strictly in TONIGHT. NEVER narrate dawn, waking up, morning light, or tomorrow's weather in prose. Do NOT print an OOC block, Stat Tracker, or dice rolls in Part 1.
+
+    PART 2 — HARD SYSTEM WALL & FRIENDLY MAINTENANCE WINDOW:
+    - Print a horizontal divider (---) right after the vignette.
+    - Print the Weather Calculation block using the exact server-provided values (${weatherRoll}, ${weather.name}, ${weather.effect}).
+    - Drop into your warm, co-conspiratorial GM persona (the player's biggest fan and story partner): react warmly in 1–2 brief sentences to today's events, optionally drop a tiny *Behind the Screen* peek into the Apex's lingering emotional state from today (STRICTLY ZERO SPOILERS for locked backstory, unreached bond tiers, or tomorrow's encounter), and invite the player to request their **Narrative Summary**, update their **Daily Save Log** / **Grotto Register**, chat OOC, or type **Proceed** whenever they are ready for morning.
+    - HARD STOP immediately after the Maintenance Window sign-off. Do NOT resume narrative gameplay.]`;
   }
 
   else if (isDayStartAnchor(body.playerInput)) {
