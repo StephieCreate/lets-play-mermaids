@@ -170,6 +170,7 @@ export default function RulesPage({ onBack, onSignIn, hasRulesUpdate = false, em
   });
 
   const editorRef = useRef<HTMLTextAreaElement>(null);
+  const docScrollRef = useRef<HTMLDivElement>(null);
   const activeTab = allTabs.find((tab) => tab.slug === activeSlug) ?? coreRules[0];
   const activeContent = drafts[activeSlug] ?? '';
 
@@ -316,7 +317,6 @@ export default function RulesPage({ onBack, onSignIn, hasRulesUpdate = false, em
 
   const replaceAll = () => {
     if (!searchText || matchPositions.length === 0) return;
-    // Escape regex special characters for case-insensitive global replace
     const escaped = searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const updated = activeContent.replace(new RegExp(escaped, 'gi'), replaceText);
     updateActiveContent(updated);
@@ -357,7 +357,9 @@ export default function RulesPage({ onBack, onSignIn, hasRulesUpdate = false, em
     setEditing(false);
     setShowFindReplace(false);
     setMobileView('doc');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (docScrollRef.current) {
+      docScrollRef.current.scrollTop = 0;
+    }
   };
 
   const renderTabButton = (tab: RuleTab) => {
@@ -401,46 +403,34 @@ export default function RulesPage({ onBack, onSignIn, hasRulesUpdate = false, em
 
   return (
     <main
-      className={`relative z-10 ${
-        embedded ? 'pt-2 pb-10 sm:pt-4' : 'min-h-screen px-3 pt-24 pb-16 sm:pt-28 lg:px-8'
+      className={`relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden ${
+        embedded ? 'h-full' : 'h-[100dvh] pt-16 sm:pt-20'
       }`}
     >
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-1 flex-col overflow-hidden lg:px-6 lg:py-4">
         {!embedded && (
-          <button
-            type="button"
-            onClick={onBack}
-            className="group mb-6 inline-flex min-h-11 items-center gap-2 text-sm font-medium text-muted transition-colors hover:text-pearl"
-          >
-            <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
-            Back to the ocean
-          </button>
+          <div className="shrink-0 px-3 pt-2 lg:px-0">
+            <button
+              type="button"
+              onClick={onBack}
+              className="group mb-2 inline-flex min-h-10 items-center gap-2 text-sm font-medium text-muted transition-colors hover:text-pearl"
+            >
+              <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
+              Back to the ocean
+            </button>
+          </div>
         )}
 
-        {/* Hide main header on mobile when drilled into a document so editor gets maximum screen */}
-        <div className={`${subTab === 'codex' && mobileView === 'doc' ? 'hidden lg:block' : 'block'} mb-5`}>
-          <div className="mb-2 flex items-center gap-2.5 text-abyss-300/65">
-            <FileText className="h-4 w-4" />
-            <span className="text-xs font-semibold uppercase tracking-[0.22em]">The Codex</span>
-          </div>
-          <h1 className="font-display text-3xl font-semibold leading-tight text-pearl text-glow-soft sm:text-4xl">
-            Rules of the Deep
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
-            Core references, apex plugins, cartridge store, and your rules helper — all in one place.
-          </p>
-        </div>
-
-        {/* SUB-TAB PILL STRIP */}
+        {/* PINNED TOP SUB-TAB STRIP (stays fixed while only the center pane scrolls) */}
         <div
           className={`${
-            subTab === 'codex' && mobileView === 'doc' ? 'hidden lg:flex' : 'flex'
-          } glass-panel mb-6 items-center gap-1 rounded-2xl p-1.5`}
+            subTab === 'codex' && mobileView === 'doc' && editing ? 'hidden lg:flex' : 'flex'
+          } shrink-0 items-center gap-1 border-b border-abyss-700/35 bg-abyss-950/90 px-2 py-1.5 backdrop-blur-xl sm:mx-3 sm:mt-2 sm:rounded-2xl sm:border sm:glass-panel lg:mx-0 lg:mb-4 lg:mt-0`}
         >
           <button
             type="button"
             onClick={() => setSubTab('codex')}
-            className={`flex min-h-12 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[11px] font-medium leading-none transition-all sm:min-h-10 sm:flex-row sm:gap-2 sm:px-3 sm:text-sm ${
+            className={`flex min-h-11 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[11px] font-medium leading-none transition-all sm:min-h-10 sm:flex-row sm:gap-2 sm:px-3 sm:text-sm ${
               subTab === 'codex'
                 ? 'bg-abyss-500/35 text-pearl shadow-sm'
                 : 'text-muted hover:bg-abyss-800/40 hover:text-pearl'
@@ -453,7 +443,7 @@ export default function RulesPage({ onBack, onSignIn, hasRulesUpdate = false, em
           <button
             type="button"
             onClick={() => setSubTab('helper')}
-            className={`flex min-h-12 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[11px] font-medium leading-none transition-all sm:min-h-10 sm:flex-row sm:gap-2 sm:px-3 sm:text-sm ${
+            className={`flex min-h-11 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[11px] font-medium leading-none transition-all sm:min-h-10 sm:flex-row sm:gap-2 sm:px-3 sm:text-sm ${
               subTab === 'helper'
                 ? 'bg-abyss-500/35 text-pearl shadow-sm'
                 : 'text-muted hover:bg-abyss-800/40 hover:text-pearl'
@@ -466,7 +456,7 @@ export default function RulesPage({ onBack, onSignIn, hasRulesUpdate = false, em
           <button
             type="button"
             onClick={() => setSubTab('store')}
-            className={`flex min-h-12 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[11px] font-medium leading-none transition-all sm:min-h-10 sm:flex-row sm:gap-2 sm:px-3 sm:text-sm ${
+            className={`flex min-h-11 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[11px] font-medium leading-none transition-all sm:min-h-10 sm:flex-row sm:gap-2 sm:px-3 sm:text-sm ${
               subTab === 'store'
                 ? 'bg-abyss-500/35 text-pearl shadow-sm'
                 : 'text-muted hover:bg-abyss-800/40 hover:text-pearl'
@@ -489,7 +479,7 @@ export default function RulesPage({ onBack, onSignIn, hasRulesUpdate = false, em
             <button
               type="button"
               onClick={() => setSubTab('dev')}
-              className={`flex min-h-12 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[11px] font-medium leading-none transition-all sm:min-h-10 sm:flex-row sm:gap-2 sm:px-3 sm:text-sm ${
+              className={`flex min-h-11 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[11px] font-medium leading-none transition-all sm:min-h-10 sm:flex-row sm:gap-2 sm:px-3 sm:text-sm ${
                 subTab === 'dev'
                   ? 'border border-amber-400/40 bg-amber-500/20 text-amber-200 shadow-sm'
                   : 'text-amber-300/75 hover:bg-amber-500/10 hover:text-amber-200'
@@ -501,316 +491,349 @@ export default function RulesPage({ onBack, onSignIn, hasRulesUpdate = false, em
           )}
         </div>
 
-        {/* ==================== SUB-TAB 1: CODEX ==================== */}
-        {subTab === 'codex' && (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[17.5rem_minmax(0,1fr)] lg:items-start lg:gap-6">
-            {/* STEP A (Mobile Directory) / Left Column (Desktop) */}
-            <nav
-              className={`glass-panel min-w-0 rounded-2xl p-2 ${mobileView === 'doc' ? 'hidden lg:block' : 'block'}`}
-              aria-label="Rule tabs"
-            >
-              {(
-                [
-                  { key: 'core-rules', label: 'Core rules', tabs: coreRules },
-                  { key: 'apex-plugins', label: 'Apex plugins', tabs: apexPlugins },
-                  { key: 'triad-tabs', label: 'Triad opt-in', tabs: triadTabs },
-                  { key: 'npc-tabs', label: 'NPC opt-in', tabs: npcTabs },
-                ] as const
-              ).map((section, sectionIndex) => {
-                const collapsed = collapsedSections[section.key];
-                return (
-                  <div key={section.key} className={sectionIndex > 0 ? 'mt-1 border-t border-abyss-700/25 pt-2' : ''}>
+        {/* ==================== CENTER STAGE (ONLY THIS REGION SCROLLS) ==================== */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {/* ==================== SUB-TAB 1: CODEX ==================== */}
+          {subTab === 'codex' && (
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:grid lg:grid-cols-[17.5rem_minmax(0,1fr)] lg:gap-6">
+              {/* STEP A (Mobile Directory) / Left Column (Desktop) */}
+              <div
+                className={`${
+                  mobileView === 'doc' ? 'hidden lg:flex' : 'flex'
+                } min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-3 py-4 sm:px-4 lg:h-full lg:px-0 lg:py-0`}
+              >
+                <div className="mb-4 shrink-0">
+                  <div className="mb-1.5 flex items-center gap-2 text-abyss-300/65">
+                    <FileText className="h-4 w-4" />
+                    <span className="text-xs font-semibold uppercase tracking-[0.22em]">The Codex</span>
+                  </div>
+                  <h1 className="font-display text-2xl font-semibold leading-tight text-pearl text-glow-soft sm:text-3xl">
+                    Rules of the Deep
+                  </h1>
+                  <p className="mt-1.5 text-sm leading-relaxed text-muted">
+                    Core references, apex plugins, cartridge store, and your rules helper — all in one place.
+                  </p>
+                </div>
+
+                <nav className="glass-panel min-w-0 rounded-2xl p-2" aria-label="Rule tabs">
+                  {(
+                    [
+                      { key: 'core-rules', label: 'Core rules', tabs: coreRules },
+                      { key: 'apex-plugins', label: 'Apex plugins', tabs: apexPlugins },
+                      { key: 'triad-tabs', label: 'Triad opt-in', tabs: triadTabs },
+                      { key: 'npc-tabs', label: 'NPC opt-in', tabs: npcTabs },
+                    ] as const
+                  ).map((section, sectionIndex) => {
+                    const collapsed = collapsedSections[section.key];
+                    return (
+                      <div key={section.key} className={sectionIndex > 0 ? 'mt-1 border-t border-abyss-700/25 pt-2' : ''}>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCollapsedSections((prev) => ({
+                              ...prev,
+                              [section.key]: !prev[section.key],
+                            }))
+                          }
+                          className="flex min-h-10 w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-abyss-300/75 transition-colors hover:bg-abyss-800/35 hover:text-abyss-200"
+                          aria-expanded={!collapsed}
+                        >
+                          <span>{section.label}</span>
+                          <ChevronDown
+                            className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${
+                              collapsed ? '-rotate-90' : ''
+                            }`}
+                          />
+                        </button>
+                        {!collapsed && (
+                          <div className="flex flex-col gap-1 pb-1 pt-1">
+                            {section.tabs.map(renderTabButton)}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </nav>
+              </div>
+
+              {/* STEP B (Mobile Doc Reader) / Right Column (Desktop) */}
+              <section
+                className={`${
+                  mobileView === 'list' ? 'hidden lg:flex' : 'flex'
+                } min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:glass-panel lg:h-full lg:rounded-2xl`}
+              >
+                {/* Pinned Doc Action Bar */}
+                <div className="shrink-0 border-b border-abyss-700/30 bg-abyss-950/85 px-3 py-2.5 backdrop-blur-xl sm:px-5 lg:bg-transparent lg:px-6 lg:py-4 lg:backdrop-blur-none">
+                  <div className="flex items-center justify-between gap-2">
+                    {/* Mobile Back Button */}
                     <button
                       type="button"
-                      onClick={() =>
-                        setCollapsedSections((prev) => ({
-                          ...prev,
-                          [section.key]: !prev[section.key],
-                        }))
-                      }
-                      className="flex min-h-10 w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-abyss-300/75 transition-colors hover:bg-abyss-800/35 hover:text-abyss-200"
-                      aria-expanded={!collapsed}
+                      onClick={() => {
+                        if (editing) handleCancelEdit();
+                        setMobileView('list');
+                      }}
+                      className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-abyss-500/30 bg-abyss-800/40 px-3 py-1.5 text-xs font-medium text-pearl transition-colors hover:bg-abyss-700/50 lg:hidden"
                     >
-                      <span>{section.label}</span>
-                      <ChevronDown
-                        className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${
-                          collapsed ? '-rotate-90' : ''
-                        }`}
-                      />
+                      <ArrowLeft className="h-3.5 w-3.5" />
+                      <span>Back</span>
                     </button>
-                    {!collapsed && (
-                      <div className="flex flex-col gap-1 pb-1 pt-1">
-                        {section.tabs.map(renderTabButton)}
-                      </div>
-                    )}
+
+                    {/* Desktop Title (inline in header) */}
+                    <div className="hidden min-w-0 lg:block">
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-[0.2em] text-abyss-300/70">
+                        {categoryLabel}
+                      </p>
+                      <h2 className="break-words font-display text-2xl font-semibold text-pearl xl:text-3xl">
+                        {activeTab.title}
+                        {activeTab.subtitle && (
+                          <span className="ml-3 text-lg font-normal text-muted">
+                            {activeTab.subtitle}
+                          </span>
+                        )}
+                      </h2>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+                      {!editing ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={handleCopy}
+                            disabled={loading || !activeContent}
+                            className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-abyss-500/30 px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-abyss-300/50 hover:text-pearl disabled:cursor-not-allowed disabled:opacity-40 sm:text-sm"
+                          >
+                            {copied ? <Check className="h-4 w-4 text-emerald-300" /> : <Clipboard className="h-4 w-4" />}
+                            <span>{copied ? 'Copied' : 'Copy'}</span>
+                          </button>
+                          {isWhitelistedAdmin ? (
+                            <button
+                              type="button"
+                              onClick={handleStartEdit}
+                              className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-abyss-400/40 bg-abyss-700/35 px-3 py-1.5 text-xs font-medium text-pearl transition-colors hover:border-abyss-300/60 hover:bg-abyss-600/45 sm:text-sm"
+                            >
+                              <Edit3 className="h-4 w-4" />
+                              <span>{user ? 'Edit' : 'Sign in'}</span>
+                            </button>
+                          ) : (
+                            <span className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-abyss-600/30 bg-abyss-800/20 px-3 py-1.5 text-xs font-medium text-muted/80">
+                              <LockKeyhole className="h-3.5 w-3.5" />
+                              <span>Read-only</span>
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={handleCancelEdit}
+                            disabled={saving}
+                            className="inline-flex min-h-10 items-center justify-center gap-1 rounded-lg border border-abyss-500/30 px-2.5 py-1.5 text-xs font-medium text-muted transition-colors hover:text-pearl sm:px-3 sm:text-sm"
+                          >
+                            <X className="h-4 w-4" />
+                            <span className="hidden sm:inline">Cancel</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowFindReplace((v) => !v)}
+                            className={`inline-flex h-10 w-10 items-center justify-center rounded-lg border transition-colors ${
+                              showFindReplace
+                                ? 'border-foam-400/50 bg-foam-900/30 text-foam-200'
+                                : 'border-abyss-500/35 bg-abyss-800/40 text-muted hover:text-pearl'
+                            }`}
+                            aria-label="Toggle find and replace"
+                            title="Find and Replace"
+                          >
+                            <Search className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleAccept}
+                            disabled={saving || loading}
+                            className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-abyss-500 to-abyss-400 px-3.5 py-1.5 text-xs font-semibold text-pearl transition-all hover:from-abyss-400 hover:to-abyss-300 disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm"
+                          >
+                            <Check className="h-4 w-4" />
+                            <span>{saving ? 'Saving...' : 'Save'}</span>
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
-                );
-              })}
-            </nav>
 
-            {/* STEP B (Mobile Fullscreen Doc) / Right Column (Desktop) */}
-            <section
-              className={`glass-panel min-w-0 rounded-2xl p-4 sm:p-6 lg:p-8 ${
-                mobileView === 'list' ? 'hidden lg:block' : 'block'
-              }`}
-            >
-              {/* Sticky Action Bar (pinned while scrolling/editing on phone) */}
-              <div className="sticky top-14 z-20 -mx-4 -mt-4 mb-5 rounded-t-2xl border-b border-abyss-700/30 bg-abyss-950/90 px-4 py-3 backdrop-blur-xl sm:-mx-6 sm:-mt-6 sm:px-6 lg:static lg:mx-0 lg:mt-0 lg:rounded-none lg:bg-transparent lg:px-0 lg:pt-0 lg:pb-5 lg:backdrop-blur-none">
-                <div className="flex items-center justify-between gap-2">
-                  {/* Mobile Back Button */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (editing) handleCancelEdit();
-                      setMobileView('list');
-                    }}
-                    className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-abyss-500/30 bg-abyss-800/40 px-3 py-1.5 text-xs font-medium text-pearl transition-colors hover:bg-abyss-700/50 lg:hidden"
-                  >
-                    <ArrowLeft className="h-3.5 w-3.5" />
-                    <span>Back</span>
-                  </button>
+                  {/* Compact 2-Row Find & Replace Drawer */}
+                  {editing && showFindReplace && (
+                    <div className="mt-3 space-y-2 rounded-xl border border-abyss-600/40 bg-abyss-900/75 p-2.5">
+                      <div className="flex items-center gap-1.5">
+                        <div className="relative flex-1">
+                          <input
+                            type="text"
+                            value={searchText}
+                            onChange={(e) => {
+                              setSearchText(e.target.value);
+                              setCurrentMatchIdx(0);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleFindStep(e.shiftKey ? -1 : 1);
+                              }
+                            }}
+                            placeholder="Find..."
+                            className="min-h-10 w-full rounded-lg border border-abyss-600/40 bg-abyss-950/70 py-1.5 pl-3 pr-12 text-xs text-pearl outline-none placeholder:text-muted/50 focus:border-abyss-400/60 sm:text-sm"
+                          />
+                          {searchText && (
+                            <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 font-mono text-[11px] text-abyss-200/80">
+                              {matchPositions.length > 0
+                                ? `${currentMatchIdx + 1}/${matchPositions.length}`
+                                : '0/0'}
+                            </span>
+                          )}
+                        </div>
 
-                  {/* Desktop Title (inline in header) */}
-                  <div className="hidden min-w-0 lg:block">
-                    <p className="mb-1 text-xs font-semibold uppercase tracking-[0.2em] text-abyss-300/70">
+                        <button
+                          type="button"
+                          onClick={() => handleFindStep(-1)}
+                          disabled={matchPositions.length === 0}
+                          className="inline-flex h-10 w-9 shrink-0 items-center justify-center rounded-lg border border-abyss-600/40 bg-abyss-950/50 text-pearl transition-colors hover:border-abyss-400/60 hover:bg-abyss-800/60 disabled:opacity-35"
+                          aria-label="Previous match"
+                          title="Previous match"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleFindStep(1)}
+                          disabled={matchPositions.length === 0}
+                          className="inline-flex h-10 w-9 shrink-0 items-center justify-center rounded-lg border border-abyss-600/40 bg-abyss-950/50 text-pearl transition-colors hover:border-abyss-400/60 hover:bg-abyss-800/60 disabled:opacity-35"
+                          aria-label="Next match"
+                          title="Next match"
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          value={replaceText}
+                          onChange={(e) => setReplaceText(e.target.value)}
+                          placeholder="Replace with..."
+                          className="min-h-10 min-w-0 flex-1 rounded-lg border border-abyss-600/40 bg-abyss-950/70 px-3 py-1.5 text-xs text-pearl outline-none placeholder:text-muted/50 focus:border-abyss-400/60 sm:text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={replaceCurrent}
+                          disabled={matchPositions.length === 0}
+                          className="min-h-10 shrink-0 rounded-lg border border-abyss-500/40 bg-abyss-800/60 px-3 py-1.5 text-xs font-medium text-pearl transition-colors hover:bg-abyss-700/70 disabled:opacity-35"
+                        >
+                          Replace
+                        </button>
+                        <button
+                          type="button"
+                          onClick={replaceAll}
+                          disabled={matchPositions.length === 0}
+                          className="min-h-10 shrink-0 rounded-lg border border-abyss-500/40 bg-abyss-800/60 px-3 py-1.5 text-xs font-medium text-pearl transition-colors hover:bg-abyss-700/70 disabled:opacity-35"
+                        >
+                          All
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Scrollable Document Body */}
+                <div
+                  ref={docScrollRef}
+                  className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 sm:px-5 lg:px-6 lg:py-5"
+                >
+                  {/* Mobile Document Title */}
+                  <div className="mb-4 lg:hidden">
+                    <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-abyss-300/70">
                       {categoryLabel}
                     </p>
-                    <h2 className="break-words font-display text-3xl font-semibold text-pearl">
+                    <h2 className="break-words font-display text-2xl font-semibold text-pearl">
                       {activeTab.title}
                       {activeTab.subtitle && (
-                        <span className="ml-3 text-lg font-normal text-muted">
+                        <span className="ml-2 text-base font-normal text-muted">
                           {activeTab.subtitle}
                         </span>
                       )}
                     </h2>
                   </div>
 
-                  {/* Action Buttons */}
-                  <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-                    {!editing ? (
-                      <>
-                        <button
-                          type="button"
-                          onClick={handleCopy}
-                          disabled={loading || !activeContent}
-                          className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-abyss-500/30 px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-abyss-300/50 hover:text-pearl disabled:cursor-not-allowed disabled:opacity-40 sm:text-sm"
-                        >
-                          {copied ? <Check className="h-4 w-4 text-emerald-300" /> : <Clipboard className="h-4 w-4" />}
-                          <span>{copied ? 'Copied' : 'Copy'}</span>
-                        </button>
-                        {isWhitelistedAdmin ? (
-                          <button
-                            type="button"
-                            onClick={handleStartEdit}
-                            className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-abyss-400/40 bg-abyss-700/35 px-3 py-1.5 text-xs font-medium text-pearl transition-colors hover:border-abyss-300/60 hover:bg-abyss-600/45 sm:text-sm"
-                          >
-                            <Edit3 className="h-4 w-4" />
-                            <span>{user ? 'Edit' : 'Sign in'}</span>
-                          </button>
-                        ) : (
-                          <span className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-abyss-600/30 bg-abyss-800/20 px-3 py-1.5 text-xs font-medium text-muted/80">
-                            <LockKeyhole className="h-3.5 w-3.5" />
-                            <span>Read-only</span>
-                          </span>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          onClick={handleCancelEdit}
-                          disabled={saving}
-                          className="inline-flex min-h-10 items-center justify-center gap-1 rounded-lg border border-abyss-500/30 px-2.5 py-1.5 text-xs font-medium text-muted transition-colors hover:text-pearl sm:px-3 sm:text-sm"
-                        >
-                          <X className="h-4 w-4" />
-                          <span className="hidden sm:inline">Cancel</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setShowFindReplace((v) => !v)}
-                          className={`inline-flex h-10 w-10 items-center justify-center rounded-lg border transition-colors ${
-                            showFindReplace
-                              ? 'border-foam-400/50 bg-foam-900/30 text-foam-200'
-                              : 'border-abyss-500/35 bg-abyss-800/40 text-muted hover:text-pearl'
-                          }`}
-                          aria-label="Toggle find and replace"
-                          title="Find and Replace"
-                        >
-                          <Search className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleAccept}
-                          disabled={saving || loading}
-                          className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-abyss-500 to-abyss-400 px-3.5 py-1.5 text-xs font-semibold text-pearl transition-all hover:from-abyss-400 hover:to-abyss-300 disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm"
-                        >
-                          <Check className="h-4 w-4" />
-                          <span>{saving ? 'Saving...' : 'Save'}</span>
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {/* Compact 2-Row Find & Replace Drawer (only open when 🔍 is toggled) */}
-                {editing && showFindReplace && (
-                  <div className="mt-3 space-y-2 rounded-xl border border-abyss-600/40 bg-abyss-900/75 p-2.5">
-                    {/* Row 1: Find input + Match counter + Prev / Next jump buttons */}
-                    <div className="flex items-center gap-1.5">
-                      <div className="relative flex-1">
-                        <input
-                          type="text"
-                          value={searchText}
-                          onChange={(e) => {
-                            setSearchText(e.target.value);
-                            setCurrentMatchIdx(0);
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              handleFindStep(e.shiftKey ? -1 : 1);
-                            }
-                          }}
-                          placeholder="Find..."
-                          className="min-h-10 w-full rounded-lg border border-abyss-600/40 bg-abyss-950/70 py-1.5 pl-3 pr-12 text-xs text-pearl outline-none placeholder:text-muted/50 focus:border-abyss-400/60 sm:text-sm"
-                        />
-                        {searchText && (
-                          <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 font-mono text-[11px] text-abyss-200/80">
-                            {matchPositions.length > 0
-                              ? `${currentMatchIdx + 1}/${matchPositions.length}`
-                              : '0/0'}
-                          </span>
-                        )}
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => handleFindStep(-1)}
-                        disabled={matchPositions.length === 0}
-                        className="inline-flex h-10 w-9 shrink-0 items-center justify-center rounded-lg border border-abyss-600/40 bg-abyss-950/50 text-pearl transition-colors hover:border-abyss-400/60 hover:bg-abyss-800/60 disabled:opacity-35"
-                        aria-label="Previous match"
-                        title="Previous match"
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleFindStep(1)}
-                        disabled={matchPositions.length === 0}
-                        className="inline-flex h-10 w-9 shrink-0 items-center justify-center rounded-lg border border-abyss-600/40 bg-abyss-950/50 text-pearl transition-colors hover:border-abyss-400/60 hover:bg-abyss-800/60 disabled:opacity-35"
-                        aria-label="Next match"
-                        title="Next match"
-                      >
-                        <ChevronRight className="h-4 w-4" />
-                      </button>
-                    </div>
-
-                    {/* Row 2: Replace input + Replace & All side-by-side */}
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="text"
-                        value={replaceText}
-                        onChange={(e) => setReplaceText(e.target.value)}
-                        placeholder="Replace with..."
-                        className="min-h-10 min-w-0 flex-1 rounded-lg border border-abyss-600/40 bg-abyss-950/70 px-3 py-1.5 text-xs text-pearl outline-none placeholder:text-muted/50 focus:border-abyss-400/60 sm:text-sm"
-                      />
-                      <button
-                        type="button"
-                        onClick={replaceCurrent}
-                        disabled={matchPositions.length === 0}
-                        className="min-h-10 shrink-0 rounded-lg border border-abyss-500/40 bg-abyss-800/60 px-3 py-1.5 text-xs font-medium text-pearl transition-colors hover:bg-abyss-700/70 disabled:opacity-35"
-                      >
-                        Replace
-                      </button>
-                      <button
-                        type="button"
-                        onClick={replaceAll}
-                        disabled={matchPositions.length === 0}
-                        className="min-h-10 shrink-0 rounded-lg border border-abyss-500/40 bg-abyss-800/60 px-3 py-1.5 text-xs font-medium text-pearl transition-colors hover:bg-abyss-700/70 disabled:opacity-35"
-                      >
-                        All
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Mobile Document Title (below sticky bar) */}
-              <div className="mb-4 lg:hidden">
-                <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-abyss-300/70">
-                  {categoryLabel}
-                </p>
-                <h2 className="break-words font-display text-2xl font-semibold text-pearl">
-                  {activeTab.title}
-                  {activeTab.subtitle && (
-                    <span className="ml-2 text-base font-normal text-muted">
-                      {activeTab.subtitle}
-                    </span>
+                  {error && (
+                    <p className="mb-4 rounded-lg border border-coral-600/30 bg-coral-600/10 px-4 py-3 text-sm text-coral-300">
+                      {error}
+                    </p>
                   )}
-                </h2>
-              </div>
 
-              {error && (
-                <p className="mb-4 rounded-lg border border-coral-600/30 bg-coral-600/10 px-4 py-3 text-sm text-coral-300">
-                  {error}
-                </p>
-              )}
+                  {authLoading || loading ? (
+                    <div className="flex min-h-[20rem] items-center justify-center text-sm text-muted">
+                      Loading your codex...
+                    </div>
+                  ) : !user ? (
+                    <div className="flex min-h-[20rem] flex-col items-center justify-center rounded-xl border border-dashed border-abyss-600/40 bg-abyss-950/25 px-6 text-center">
+                      <LockKeyhole className="h-7 w-7 text-abyss-300/70" />
+                      <h3 className="mt-4 font-display text-xl font-medium text-pearl">
+                        Your private rules archive
+                      </h3>
+                      <p className="mt-2 max-w-md text-sm leading-relaxed text-muted">
+                        Sign in to read, edit, save, and copy your markdown rule references.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={onSignIn}
+                        className="mt-6 min-h-11 rounded-lg bg-abyss-500/80 px-5 py-2.5 text-sm font-semibold text-pearl transition-colors hover:bg-abyss-400"
+                      >
+                        Sign in to continue
+                      </button>
+                    </div>
+                  ) : editing ? (
+                    <textarea
+                      ref={editorRef}
+                      value={activeContent}
+                      onChange={(event) => updateActiveContent(event.target.value)}
+                      placeholder="Paste your markdown rules here..."
+                      className="min-h-[55dvh] w-full resize-y rounded-xl border border-abyss-600/40 bg-abyss-950/55 p-3.5 font-mono text-sm leading-7 text-pearl outline-none placeholder:text-muted/50 focus:border-abyss-400/60 sm:min-h-[28rem] sm:p-4"
+                      spellCheck={false}
+                    />
+                  ) : (
+                    <pre className="min-h-[20rem] whitespace-pre-wrap break-words rounded-xl border border-abyss-700/30 bg-abyss-950/35 p-3.5 font-mono text-sm leading-7 text-muted sm:min-h-[24rem] sm:p-4">
+                      {activeContent ||
+                        'No markdown has been added to this reference yet. Tap Edit to paste it in.'}
+                    </pre>
+                  )}
 
-              {authLoading || loading ? (
-                <div className="flex min-h-[20rem] items-center justify-center text-sm text-muted">
-                  Loading your codex...
+                  <div className="mt-5 flex items-center gap-2.5 text-xs text-muted/70 sm:text-sm">
+                    <Waves className="h-4 w-4 shrink-0 text-abyss-300/60" />
+                    <span>Markdown is stored as plain text in your archive.</span>
+                  </div>
                 </div>
-              ) : !user ? (
-                <div className="flex min-h-[20rem] flex-col items-center justify-center rounded-xl border border-dashed border-abyss-600/40 bg-abyss-950/25 px-6 text-center">
-                  <LockKeyhole className="h-7 w-7 text-abyss-300/70" />
-                  <h3 className="mt-4 font-display text-xl font-medium text-pearl">
-                    Your private rules archive
-                  </h3>
-                  <p className="mt-2 max-w-md text-sm leading-relaxed text-muted">
-                    Sign in to read, edit, save, and copy your markdown rule references.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={onSignIn}
-                    className="mt-6 min-h-11 rounded-lg bg-abyss-500/80 px-5 py-2.5 text-sm font-semibold text-pearl transition-colors hover:bg-abyss-400"
-                  >
-                    Sign in to continue
-                  </button>
-                </div>
-              ) : editing ? (
-                <textarea
-                  ref={editorRef}
-                  value={activeContent}
-                  onChange={(event) => updateActiveContent(event.target.value)}
-                  placeholder="Paste your markdown rules here..."
-                  className="min-h-[60svh] w-full resize-y rounded-xl border border-abyss-600/40 bg-abyss-950/55 p-3.5 font-mono text-sm leading-7 text-pearl outline-none placeholder:text-muted/50 focus:border-abyss-400/60 sm:min-h-[28rem] sm:p-4"
-                  spellCheck={false}
-                />
-              ) : (
-                <pre className="min-h-[20rem] whitespace-pre-wrap break-words rounded-xl border border-abyss-700/30 bg-abyss-950/35 p-3.5 font-mono text-sm leading-7 text-muted sm:min-h-[24rem] sm:p-4">
-                  {activeContent ||
-                    'No markdown has been added to this reference yet. Tap Edit to paste it in.'}
-                </pre>
-              )}
+              </section>
+            </div>
+          )}
 
-              <div className="mt-5 flex items-center gap-2.5 text-xs text-muted/70 sm:text-sm">
-                <Waves className="h-4 w-4 shrink-0 text-abyss-300/60" />
-                <span>Markdown is stored as plain text in your archive.</span>
-              </div>
-            </section>
-          </div>
-        )}
+          {/* ==================== SUB-TAB 2: PLAYER RULES HELPER AI ==================== */}
+          {subTab === 'helper' && (
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <RulesHelperChat onSignIn={onSignIn} />
+            </div>
+          )}
 
-        {/* ==================== SUB-TAB 2: PLAYER RULES HELPER AI (Ticket 7) ==================== */}
-        {subTab === 'helper' && <RulesHelperChat onSignIn={onSignIn} />}
+          {/* ==================== SUB-TAB 3: STORE & CARTRIDGES ==================== */}
+          {subTab === 'store' && (
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 sm:px-4 lg:px-0 lg:py-0">
+              <RulesStorePanel onRulesInstalled={handleRulesImported} onSignIn={onSignIn} />
+            </div>
+          )}
 
-        {/* ==================== SUB-TAB 3: STORE & CARTRIDGES ==================== */}
-        {subTab === 'store' && (
-          <RulesStorePanel onRulesInstalled={handleRulesImported} onSignIn={onSignIn} />
-        )}
-
-        {/* ==================== SUB-TAB 4: ADMIN DEV MODE (Ticket 5 Shell) ==================== */}
-        {isWhitelistedAdmin && subTab === 'dev' && <DevModeStudio />}
+          {/* ==================== SUB-TAB 4: ADMIN DEV MODE ==================== */}
+          {isWhitelistedAdmin && subTab === 'dev' && (
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <DevModeStudio />
+            </div>
+          )}
+        </div>
       </div>
     </main>
   );
