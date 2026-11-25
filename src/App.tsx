@@ -69,6 +69,8 @@ function AppContent() {
   const [latestStoreVersion, setLatestStoreVersion] = useState<string | null>(null);
   const [installedCartridgeVersion, setInstalledCartridgeVersion] = useState<string | null>(null);
 
+  const isRulesLockedView = currentView !== 'play' && activeTab === 'rules';
+
   const hasUnreadNews = newsPosts.some(
     (post) =>
       !readNewsIds.includes(post.id) &&
@@ -279,7 +281,7 @@ function AppContent() {
   }, [currentView]);
 
   return (
-    <div className="relative min-h-screen">
+    <div className={isRulesLockedView ? 'relative h-[100dvh] overflow-hidden' : 'relative min-h-screen'}>
       <OceanBackground />
 
       {currentView !== 'play' && (
@@ -303,6 +305,17 @@ function AppContent() {
           onSignIn={() => setAuthModalOpen(true)}
           onReportBug={() => setBugReportOpen(true)}
         />
+      ) : isRulesLockedView ? (
+        <div className="relative z-10 flex h-full min-h-0 flex-col overflow-hidden pt-14 pb-20 md:pl-60 md:pt-0 md:pb-0">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <RulesPage
+              onBack={() => handleSelectTab('characters')}
+              onSignIn={() => setAuthModalOpen(true)}
+              hasRulesUpdate={hasRulesUpdate}
+              embedded
+            />
+          </div>
+        </div>
       ) : (
         <div className="relative z-10 flex min-h-screen flex-col pt-14 pb-20 md:pl-60 md:pt-0 md:pb-0">
           <main className="flex-1">
@@ -319,15 +332,6 @@ function AppContent() {
                   }}
                   onSignIn={() => setAuthModalOpen(true)}
                   refreshKey={rosterRefreshKey}
-                />
-              )}
-
-              {activeTab === 'rules' && (
-                <RulesPage
-                  onBack={() => handleSelectTab('characters')}
-                  onSignIn={() => setAuthModalOpen(true)}
-                  hasRulesUpdate={hasRulesUpdate}
-                  embedded
                 />
               )}
 
@@ -456,14 +460,14 @@ function AppContent() {
                             <span>Report a Bug</span>
                           </button>
                           <a
-  href="https://discord.gg/G5DbenAjJ"
-  target="_blank"
-  rel="noopener noreferrer"
-  className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-indigo-400/30 bg-indigo-500/15 px-4 py-2 text-sm font-medium text-indigo-200 transition-colors hover:border-indigo-300/50 hover:bg-indigo-500/25 hover:text-pearl"
->
-  <MessageCircle className="h-4 w-4" />
-  <span>Join us on Discord</span>
-</a>
+                            href="https://discord.gg/G5DbenAjJ"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-indigo-400/30 bg-indigo-500/15 px-4 py-2 text-sm font-medium text-indigo-200 transition-colors hover:border-indigo-300/50 hover:bg-indigo-500/25 hover:text-pearl"
+                          >
+                            <MessageCircle className="h-4 w-4" />
+                            <span>Join us on Discord</span>
+                          </a>
                         </div>
                       </div>
                     </div>
