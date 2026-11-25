@@ -3,11 +3,11 @@
   "functions": {
     "narrate": {
       "hasChanged": false,
-      "hash": "539c45dd1c56b1e338204e38bce973055943fe112143905d39d71b32a688fe19"
+      "hash": "6862548ef0ee488f1aa6dbb4111d6ecbf8049890efbf53d30b12ce4dbad00798"
     },
     "rules-helper": {
       "hasChanged": false,
-      "hash": "fd68d9c8bc8eee3cc50031cfe66580b37fa70509062a3a4ed8f3ade047a3bec7"
+      "hash": "dced56b2e2cecb198fd8abd4af41f27e6f4449d93f3cb4934b2aad25893a0729"
     }
   }
 }

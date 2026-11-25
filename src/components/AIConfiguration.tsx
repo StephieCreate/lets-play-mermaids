@@ -87,8 +87,8 @@ interface ModelOption {
 
 const MODELS_BY_PROVIDER: Record<Provider, ModelOption[]> = {
   deepseek: [
-    { id: 'deepseek-v4-pro', label: 'DeepSeek (V4 Pro)', costPerTurn: 0.0185 },
-    { id: 'deepseek-v4.1-flash', label: 'DeepSeek (V4.1 Flash)', costPerTurn: 0.0045 },
+    { id: 'deepseek-v4-pro', label: 'DeepSeek-V4-Pro', costPerTurn: 0.0185 },
+    { id: 'deepseek-flash', label: 'DeepSeek-V4.1-Flash', costPerTurn: 0.0045 },
   ],
   openai: [
     { id: 'openai-gpt4o-mini', label: 'GPT-4o Mini', costPerTurn: 0.012 },

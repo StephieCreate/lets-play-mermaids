@@ -24,8 +24,8 @@ const EXTRAS_CATEGORIES =
 
 // Same provider/model mapping the game uses so the player's bound model works.
 const PROVIDER_MODELS: Record<string, string> = {
+  "deepseek-flash": "deepseek-flash",
   "deepseek-v4-pro": "deepseek-v4-pro",
-  "deepseek-v4.1-flash": "deepseek-v4.1-flash",
   "openai-gpt4o-mini": "gpt-4o-mini",
   "openai-gpt4o": "gpt-4o",
   "gemini-3.8-flash": "gemini-2.0-flash",
