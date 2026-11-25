@@ -1,5 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BookOpenCheck, Check, Copy, Eraser, Layers, Loader2, LockKeyhole, Send, Square, Trash2, Users, X } from 'lucide-react';
+import {
+  BookOpenCheck,
+  Check,
+  Copy,
+  Eraser,
+  Layers,
+  Loader2,
+  LockKeyhole,
+  Send,
+  Square,
+  Trash2,
+  Users,
+  X,
+} from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useFontSettings } from '@/context/FontSettingsContext';
 import { supabase } from '@/lib/supabase';
@@ -356,7 +369,6 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
   const deleteMessage = async (idx: number) => {
     const target = messages[idx];
     if (!target?.id) {
-      // Unsaved bubble (persist failed earlier) — just drop it locally.
       setMessages((prev) => prev.filter((_, i) => i !== idx));
       return;
     }
@@ -450,6 +462,13 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
     [user],
   );
 
+  const autoGrowInput = () => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 112)}px`;
+  };
+
   const handleSend = () => {
     const text = input.trim();
     if (!text || sending || !user) return;
@@ -488,6 +507,7 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
     const optimistic: ChatMessage = { id: null, role: 'user', content: chip };
     const nextHistory = [...messages, optimistic];
     setMessages(nextHistory);
+    setShowQuickPrompts(false);
     void (async () => {
       const savedId = await insertAssistantMessage(user.id, 'user', chip, optimistic);
       if (savedId) {
@@ -497,93 +517,143 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
     })();
   };
 
-  const autoGrowInput = () => {
-    const el = inputRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
-  };
-
   if (!user) {
     return (
-      <section className="glass-panel mx-auto max-w-3xl rounded-2xl p-5 sm:p-8">
-        <div className="mb-4 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-abyss-700/40 text-foam-300">
-            <BookOpenCheck className="h-5 w-5" />
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 sm:px-6">
+        <section className="glass-panel mx-auto max-w-3xl rounded-2xl p-5 sm:p-8">
+          <div className="mb-4 flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-abyss-700/40 text-foam-300">
+              <BookOpenCheck className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="font-display text-2xl font-semibold text-pearl">Ask the Rules Helper</h2>
+              <p className="text-xs text-muted">
+                Uses your active AI key • Looks up rules on demand • Saved to your account
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="font-display text-2xl font-semibold text-pearl">Ask the Rules Helper</h2>
-            <p className="text-xs text-muted">
-              Uses your active AI key • Looks up rules on demand • Saved to your account
+          <div className="rounded-xl border border-dashed border-abyss-600/40 bg-abyss-950/30 p-6 text-center">
+            <LockKeyhole className="mx-auto mb-3 h-7 w-7 text-abyss-300/70" />
+            <h3 className="font-display text-lg font-medium text-pearl">Sign in required</h3>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted">
+              Sign in to chat with the Rules Helper — your on-demand guide to the core rules, your
+              characters, and building Extras.
             </p>
+            <button
+              type="button"
+              onClick={onSignIn}
+              className="mt-5 min-h-11 rounded-xl bg-abyss-500/80 px-5 py-2.5 text-sm font-semibold text-pearl transition-colors hover:bg-abyss-400"
+            >
+              Sign in to continue
+            </button>
           </div>
-        </div>
-        <div className="rounded-xl border border-dashed border-abyss-600/40 bg-abyss-950/30 p-6 text-center">
-          <LockKeyhole className="mx-auto mb-3 h-7 w-7 text-abyss-300/70" />
-          <h3 className="font-display text-lg font-medium text-pearl">Sign in required</h3>
-          <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted">
-            Sign in to chat with the Rules Helper — your on-demand guide to the core rules, your
-            characters, and building Extras.
-          </p>
-          <button
-            type="button"
-            onClick={onSignIn}
-            className="mt-5 min-h-11 rounded-xl bg-abyss-500/80 px-5 py-2.5 text-sm font-semibold text-pearl transition-colors hover:bg-abyss-400"
-          >
-            Sign in to continue
-          </button>
-        </div>
-      </section>
+        </section>
+      </div>
     );
   }
 
   return (
-    <section className="glass-panel mx-auto flex max-w-3xl flex-col rounded-2xl p-4 sm:p-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-abyss-700/40 text-foam-300">
-            <BookOpenCheck className="h-5 w-5" />
+    <section className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden lg:mx-auto lg:max-w-4xl lg:glass-panel lg:rounded-2xl">
+      {/* PINNED COMPACT TOP BAR */}
+      <div className="shrink-0 border-b border-abyss-700/35 bg-abyss-950/80 px-3 py-2 backdrop-blur-xl sm:px-5 sm:py-3 lg:bg-transparent lg:backdrop-blur-none">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-abyss-700/40 text-foam-300 sm:h-9 sm:w-9 sm:rounded-xl">
+              <BookOpenCheck className="h-4 w-4 sm:h-5 sm:w-5" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="truncate font-display text-base font-semibold leading-tight text-pearl sm:text-xl">
+                Rules Helper
+              </h2>
+              <p className="hidden truncate text-xs text-muted sm:block">
+                Uses your active AI key • Looks up rules on demand • Saved to your account
+                {modelLabel ? ` • ${modelLabel}` : ''}
+              </p>
+            </div>
           </div>
-          <div className="min-w-0">
-            <h2 className="font-display text-2xl font-semibold text-pearl">Ask the Rules Helper</h2>
-            <p className="truncate text-xs text-muted">
-              Uses your active AI key • Looks up rules on demand • Saved to your account
-              {modelLabel ? ` • ${modelLabel}` : ''}
-            </p>
-          </div>
+
+          {confirmClear ? (
+            <div className="flex shrink-0 items-center gap-1.5">
+              <span className="text-xs text-coral-300">Clear?</span>
+              <button
+                type="button"
+                onClick={clearChat}
+                className="rounded-lg bg-coral-500/25 px-2.5 py-1 text-xs font-semibold text-coral-200 transition-colors hover:bg-coral-500/40"
+              >
+                Yes
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmClear(false)}
+                className="rounded-lg border border-abyss-400/30 px-2.5 py-1 text-xs font-medium text-muted transition-colors hover:text-pearl"
+              >
+                No
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmClear(true)}
+              disabled={messages.length === 0}
+              className="inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-lg border border-abyss-500/35 bg-abyss-800/40 px-2.5 py-1 text-xs font-medium text-muted transition-colors hover:text-pearl disabled:opacity-40 sm:min-h-9 sm:px-3"
+            >
+              <Eraser className="h-3.5 w-3.5" />
+              <span>Clear</span>
+            </button>
+          )}
         </div>
-        {confirmClear ? (
-          <div className="shrink-0 flex items-center gap-1.5">
-            <span className="text-xs text-coral-300">Clear all?</span>
-            <button
-              type="button"
-              onClick={clearChat}
-              className="rounded-lg bg-coral-500/25 px-2.5 py-1.5 text-xs font-semibold text-coral-200 transition-colors hover:bg-coral-500/40"
+
+        {/* SLIM CHARACTER CONTEXT + QUICK PROMPTS STRIP */}
+        <div className="mt-2 flex items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+            <Users className="h-3.5 w-3.5 shrink-0 text-foam-300/75" />
+            <label htmlFor="character-context" className="hidden shrink-0 text-xs font-medium text-muted sm:inline">
+              Character
+            </label>
+            <select
+              id="character-context"
+              value={selectedCharacterId}
+              onChange={(e) => setSelectedCharacterId(e.target.value)}
+              disabled={savedCharacters.length === 0}
+              aria-label="Character context"
+              className="min-h-8 min-w-0 flex-1 rounded-lg border border-abyss-600/40 bg-abyss-950/70 px-2 py-1 text-xs text-pearl outline-none transition-colors focus:border-abyss-400/60 disabled:cursor-not-allowed disabled:opacity-60 sm:max-w-[16rem]"
             >
-              Yes
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirmClear(false)}
-              className="rounded-lg border border-abyss-400/30 px-2.5 py-1.5 text-xs font-medium text-muted transition-colors hover:text-pearl"
-            >
-              No
-            </button>
+              {savedCharacters.length === 0 ? (
+                <option value="">No saved characters</option>
+              ) : (
+                <>
+                  <option value="" className="bg-abyss-900 text-pearl">
+                    No character (Rules only)
+                  </option>
+                  {savedCharacters.map((character) => (
+                    <option key={character.id} value={character.id} className="bg-abyss-900 text-pearl">
+                      {character.name}
+                    </option>
+                  ))}
+                </>
+              )}
+            </select>
           </div>
-        ) : (
+
           <button
             type="button"
-            onClick={() => setConfirmClear(true)}
-            disabled={messages.length === 0}
-            className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border border-abyss-500/35 bg-abyss-800/40 px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:text-pearl disabled:opacity-40"
+            onClick={() => setShowQuickPrompts((v) => !v)}
+            className={`shrink-0 rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+              showQuickPrompts
+                ? 'border-foam-400/50 bg-foam-900/30 text-foam-200'
+                : 'border-abyss-500/35 bg-abyss-800/40 text-foam-300/85 hover:text-foam-200'
+            }`}
           >
-            <Eraser className="h-3.5 w-3.5" />
-            Clear Chat
+            {showQuickPrompts ? 'Hide prompts' : '+ Prompts'}
           </button>
-        )}
+        </div>
       </div>
 
-      <div ref={feedRef} className="max-h-[64vh] min-h-[20rem] min-w-0 space-y-3 overflow-y-auto pr-1">
+      {/* ONLY SCROLLABLE CHAT FEED */}
+      <div
+        ref={feedRef}
+        className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3 sm:px-5 sm:py-4"
+      >
         {historyLoading ? (
           <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -591,189 +661,168 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
           </div>
         ) : (
           <>
-        {messages.length === 0 && !sending && (
-          <div className="rounded-xl border border-dashed border-abyss-600/40 bg-abyss-950/30 p-5 text-center">
-            <p className="mb-3 text-sm text-muted">
-              Ask anything about the rules — answers cite the exact rule section they came from.
-            </p>
-            <div className="flex flex-wrap justify-center gap-2">
-              {QUICK_PROMPTS.map((chip) => (
-                <button
-                  key={chip}
-                  type="button"
-                  onClick={() => handleChip(chip)}
-                  className="rounded-full border border-foam-400/30 bg-foam-900/20 px-3 py-1.5 text-xs font-medium text-foam-200 transition-colors hover:bg-foam-900/40"
-                >
-                  {chip}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {messages.map((message, idx) => (
-          <div
-            key={message.id ?? `local-${idx}`}
-            className={`group relative min-w-0 rounded-2xl border p-4 sm:p-5 ${
-              message.role === 'user'
-                ? 'border-abyss-400/30 bg-abyss-600/20'
-                : 'border-abyss-600/30 bg-abyss-950/40'
-            } ${message.deleting ? 'opacity-40 pointer-events-none' : ''}`}
-          >
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <p
-                className={`text-xs font-semibold uppercase tracking-[0.16em] ${
-                  message.role === 'user' ? 'text-abyss-200/70' : 'text-abyss-300/70'
-                }`}
-              >
-                {message.role === 'user' ? 'You' : 'Rules Helper'}
-              </p>
-              <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-                <button
-                  type="button"
-                  onClick={() => copyMessage(message.content, idx)}
-                  className="flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-abyss-700/50 hover:text-pearl"
-                  title="Copy message"
-                  aria-label="Copy message"
-                >
-                  {copiedIndex === idx ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void deleteMessage(idx)}
-                  disabled={message.deleting}
-                  className="flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-coral-900/30 hover:text-coral-300 disabled:opacity-40"
-                  title="Delete message"
-                  aria-label="Delete message"
-                >
-                  {message.deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
-            {message.role === 'user' ? (
-              <p
-                className={`whitespace-pre-wrap break-words leading-relaxed text-pearl/90 ${fontFamilyClass}`}
-                style={{ fontSize: fontPx }}
-              >
-                {message.content}
-              </p>
-            ) : (
-              <>
-                <div className={`min-w-0 ${fontFamilyClass}`} style={{ fontSize: fontPx }}>
-                  <AssistantMarkdown content={message.content} />
+            {messages.length === 0 && !sending && (
+              <div className="rounded-xl border border-dashed border-abyss-600/40 bg-abyss-950/30 p-4 text-center sm:p-5">
+                <p className="mb-3 text-sm text-muted">
+                  Ask anything about the rules — answers cite the exact rule section they came from.
+                </p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {QUICK_PROMPTS.map((chip) => (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => handleChip(chip)}
+                      className="rounded-full border border-foam-400/30 bg-foam-900/20 px-3 py-1.5 text-xs font-medium text-foam-200 transition-colors hover:bg-foam-900/40"
+                    >
+                      {chip}
+                    </button>
+                  ))}
                 </div>
-                  {(message.characterNames?.length ?? 0) > 0 ? (
-                    <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-foam-400/30 bg-foam-900/25 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-foam-200">
-                      <Users className="h-3 w-3" />
-                      Character: {message.characterNames!.join(', ')}
-                    </span>
-                  ) : (
-                    message.usedCharacters && (
+              </div>
+            )}
+
+            {messages.map((message, idx) => (
+              <div
+                key={message.id ?? `local-${idx}`}
+                className={`group relative min-w-0 rounded-2xl border p-3.5 sm:p-5 ${
+                  message.role === 'user'
+                    ? 'border-abyss-400/30 bg-abyss-600/20'
+                    : 'border-abyss-600/30 bg-abyss-950/40'
+                } ${message.deleting ? 'pointer-events-none opacity-40' : ''}`}
+              >
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p
+                    className={`text-xs font-semibold uppercase tracking-[0.16em] ${
+                      message.role === 'user' ? 'text-abyss-200/70' : 'text-abyss-300/70'
+                    }`}
+                  >
+                    {message.role === 'user' ? 'You' : 'Rules Helper'}
+                  </p>
+                  <div className="flex shrink-0 items-center gap-0.5 opacity-75 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100">
+                    <button
+                      type="button"
+                      onClick={() => copyMessage(message.content, idx)}
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-abyss-700/50 hover:text-pearl"
+                      title="Copy message"
+                      aria-label="Copy message"
+                    >
+                      {copiedIndex === idx ? (
+                        <Check className="h-4 w-4 text-emerald-400" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void deleteMessage(idx)}
+                      disabled={message.deleting}
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-coral-900/30 hover:text-coral-300 disabled:opacity-40"
+                      title="Delete message"
+                      aria-label="Delete message"
+                    >
+                      {message.deleting ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+                {message.role === 'user' ? (
+                  <p
+                    className={`whitespace-pre-wrap break-words leading-relaxed text-pearl/90 ${fontFamilyClass}`}
+                    style={{ fontSize: fontPx }}
+                  >
+                    {message.content}
+                  </p>
+                ) : (
+                  <>
+                    <div className={`min-w-0 break-words ${fontFamilyClass}`} style={{ fontSize: fontPx }}>
+                      <AssistantMarkdown content={message.content} />
+                    </div>
+                    {(message.characterNames?.length ?? 0) > 0 ? (
                       <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-foam-400/30 bg-foam-900/25 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-foam-200">
                         <Users className="h-3 w-3" />
-                        Your characters
+                        Character: {message.characterNames!.join(', ')}
                       </span>
-                    )
-                  )}
-                  {message.sources && message.sources.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1.5 border-t border-abyss-700/30 pt-2">
-                      {message.sources.slice(0, 6).map((source, si) => (
-                        <span
-                          key={si}
-                          className="inline-flex max-w-full items-center gap-1 truncate rounded-full border border-abyss-500/40 bg-abyss-950/50 px-2 py-0.5 text-[10px] font-medium text-abyss-200"
-                          title={`${source.docTitle} • ${source.heading}`}
-                        >
-                          <Layers className="h-2.5 w-2.5 shrink-0" />
-                          <span className="truncate">
-                            {source.docTitle} • {source.heading}
-                          </span>
+                    ) : (
+                      message.usedCharacters && (
+                        <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-foam-400/30 bg-foam-900/25 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-foam-200">
+                          <Users className="h-3 w-3" />
+                          Your characters
                         </span>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
-          </div>
-        ))}
+                      )
+                    )}
+                    {message.sources && message.sources.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5 border-t border-abyss-700/30 pt-2">
+                        {message.sources.slice(0, 6).map((source, si) => (
+                          <span
+                            key={si}
+                            className="inline-flex max-w-full items-center gap-1 truncate rounded-full border border-abyss-500/40 bg-abyss-950/50 px-2 py-0.5 text-[10px] font-medium text-abyss-200"
+                            title={`${source.docTitle} • ${source.heading}`}
+                          >
+                            <Layers className="h-2.5 w-2.5 shrink-0" />
+                            <span className="truncate">
+                              {source.docTitle} • {source.heading}
+                            </span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            ))}
 
-        {sending && (
-          <div className="rounded-2xl border border-abyss-600/30 bg-abyss-950/40 p-4 sm:p-5">
-            <div className="flex items-center gap-2 text-sm text-muted">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span className={fontFamilyClass} style={{ fontSize: fontPx }}>
-                Looking through the rules...
-              </span>
-            </div>
-          </div>
-        )}
+            {sending && (
+              <div className="rounded-2xl border border-abyss-600/30 bg-abyss-950/40 p-4 sm:p-5">
+                <div className="flex items-center gap-2 text-sm text-muted">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className={fontFamilyClass} style={{ fontSize: fontPx }}>
+                    Looking through the rules...
+                  </span>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>
 
-      {error && (
-        <div className="mt-3 flex items-start gap-2 rounded-xl border border-coral-500/30 bg-coral-900/20 px-3.5 py-2.5 text-sm text-coral-200">
-          <X className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>
-            {error}
-            {/key/i.test(error) ? ' You can add or switch keys in AI Configuration.' : ''}
-          </span>
-        </div>
-      )}
+      {/* PINNED BOTTOM COMPOSER */}
+      <div className="shrink-0 border-t border-abyss-700/35 bg-abyss-950/90 px-3 py-2 backdrop-blur-xl sm:px-5 sm:py-3 lg:bg-abyss-950/40 lg:backdrop-blur-none">
+        {error && (
+          <div className="mb-2 flex items-start gap-2 rounded-xl border border-coral-500/30 bg-coral-900/20 px-3 py-2 text-xs text-coral-200 sm:text-sm">
+            <X className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              {error}
+              {/key/i.test(error) ? ' You can add or switch keys in AI Configuration.' : ''}
+            </span>
+          </div>
+        )}
 
-      <div className="mt-3">
-        <button
-          type="button"
-          onClick={() => setShowQuickPrompts((v) => !v)}
-          className="text-xs font-medium text-foam-300/80 transition-colors hover:text-foam-200"
-        >
-          {showQuickPrompts ? '− Hide quick prompts' : '+ Quick prompts'}
-        </button>
         {showQuickPrompts && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
+          <div className="mb-2 flex max-h-24 flex-wrap gap-1.5 overflow-y-auto overscroll-contain">
             {QUICK_PROMPTS.map((prompt) => (
               <button
                 key={prompt}
                 type="button"
-                onClick={() => setInput(prompt)}
-                className="rounded-full border border-abyss-500/35 bg-abyss-900/40 px-2.5 py-1 text-[11px] font-medium text-muted transition-colors hover:text-pearl"
+                onClick={() => {
+                  setInput(prompt);
+                  setShowQuickPrompts(false);
+                  window.setTimeout(() => {
+                    autoGrowInput();
+                    inputRef.current?.focus();
+                  }, 0);
+                }}
+                className="rounded-full border border-abyss-500/35 bg-abyss-900/50 px-2.5 py-1 text-[11px] font-medium text-muted transition-colors hover:text-pearl"
               >
                 {prompt}
               </button>
             ))}
           </div>
         )}
-      </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-abyss-700/30 bg-abyss-950/40 px-3 py-2">
-        <label htmlFor="character-context" className="shrink-0 text-xs font-medium text-muted">
-          Character Context
-        </label>
-        <select
-          id="character-context"
-          value={selectedCharacterId}
-          onChange={(e) => setSelectedCharacterId(e.target.value)}
-          disabled={savedCharacters.length === 0}
-          className="min-h-9 max-w-[16rem] flex-1 rounded-lg border border-abyss-600/40 bg-abyss-950/60 px-2.5 py-1.5 text-xs text-pearl outline-none transition-colors focus:border-abyss-400/60 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {savedCharacters.length === 0 ? (
-            <option value="">No saved characters</option>
-          ) : (
-            <>
-              <option value="" className="bg-abyss-900 text-pearl">
-                No character attached (Rules only)
-              </option>
-              {savedCharacters.map((character) => (
-                <option key={character.id} value={character.id} className="bg-abyss-900 text-pearl">
-                  {character.name}
-                </option>
-              ))}
-            </>
-          )}
-        </select>
-      </div>
-
-      <div className="mt-3 min-w-0">
-        <div className="relative">
+        <div className="relative min-w-0">
           <textarea
             ref={inputRef}
             value={input}
@@ -784,20 +833,22 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
             onKeyDown={(e) => handleChatKeyDown(e, handleSend)}
             placeholder="Ask about the rules, your characters, or building Extras..."
             rows={1}
-            className="min-h-12 max-h-40 w-full resize-none overflow-y-auto rounded-xl border border-abyss-600/40 bg-abyss-900/60 py-3 pl-4 pr-14 text-sm leading-relaxed text-pearl outline-none placeholder:text-muted/50 focus:border-abyss-400/60"
+            className="min-h-11 max-h-28 w-full resize-none overflow-y-auto rounded-xl border border-abyss-600/40 bg-abyss-900/70 py-2.5 pl-3.5 pr-12 text-sm leading-relaxed text-pearl outline-none placeholder:text-muted/50 focus:border-abyss-400/60"
           />
           <button
             type="button"
             onClick={sending ? () => abortControllerRef.current?.abort() : handleSend}
             disabled={!sending && !input.trim()}
-            className="absolute bottom-2.5 right-2.5 z-10 inline-flex h-7 w-7 items-center justify-center rounded-md text-pearl/70 transition-colors hover:bg-abyss-700/40 hover:text-pearl disabled:cursor-not-allowed disabled:opacity-40"
+            className="absolute bottom-2 right-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-lg text-pearl/75 transition-colors hover:bg-abyss-700/50 hover:text-pearl disabled:cursor-not-allowed disabled:opacity-40"
             aria-label={sending ? 'Stop response' : 'Send message'}
             title={sending ? 'Stop generating' : 'Send (Enter)'}
           >
             {sending ? <Square className="h-[18px] w-[18px] fill-current" /> : <Send className="h-[18px] w-[18px]" />}
           </button>
         </div>
-        <p className="mt-1.5 text-center text-[11px] text-muted/70">Enter to send · Shift+Enter for a new line</p>
+        <p className="mt-1.5 hidden text-center text-[11px] text-muted/70 sm:block">
+          Enter to send · Shift+Enter for a new line
+        </p>
       </div>
     </section>
   );
