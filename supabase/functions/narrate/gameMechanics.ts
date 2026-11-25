@@ -593,6 +593,22 @@ export function applyCommandInterceptors(body: NarrateRequest, dailySaveLog = ""
     body.playerInput += `\n\n[MANDATORY SYSTEM DIRECTIVE FOR DAILY SAVE LOG]:\nThe player has commanded a save. You MUST output an updated Daily Save Log capturing all events, wound penalties, supplies consumed, and time progression. Format strictly according to Tab 2 specifications in a clean Markdown code block with zero conversational filler.\n[SAVE LOG WEATHER OVERWRITE]: Write the "Ocean Condition" line using the server-locked condition for the CURRENT day — "${(body.storyState["weather_condition"] as string) || "Standard"}" — exactly as provided in story state. Do NOT recycle a previous day's weather into the Save Log.\n[STAMINA TIMING LOCK]: Apply ONLY overnight rest/healing/thermal quartz bonuses. You are STRICTLY FORBIDDEN from deducting the -2 Morning Wake-Up Stamina cost during Save Log generation. Record the player's rested Stamina and write "(-2 pending at Proceed)" next to it.`;
   }
 
+    // === [SEARCH: MAINTENANCE WINDOW OOC GM CHAT] ===
+  // === (Strict DNA Test): only runs while the game is paused in WAITING COMMAND
+  else if (currentGameState === "WAITING COMMAND") {
+    // Check if the player is asking for a clean Grotto Register update so we don't add chatty filler to it
+    const isRegisterUpdate = /\bupdate\s+(?:the\s+)?(?:grotto\s+)?register\b/i.test(body.playerInput);
+
+    // ! (Dominant White masking switch): "!isRegisterUpdate" means "is NOT a register update"
+    if (!isRegisterUpdate) {
+      body.playerInput += `\n\n[MANDATORY SYSTEM DIRECTIVE — MAINTENANCE WINDOW GM CHAT]:
+      The game is currently paused in the Maintenance Window (between days). Stay in your warm, supportive, co-conspiratorial GM persona—you are the player's biggest fan helping them build the richest story possible.
+      - Answer their OOC questions, brainstorm ideas, react to today's story beats, or share grounded, non-spoiler *Behind the Screen* hints about the Apex's current headspace based ONLY on what has already happened in play.
+      - STRICT NO-SPOILER RULE: Never reveal locked backstory, unreached Bond-tier secrets, scripted twists, or tomorrow's encounter.
+      - MORNING LOCK: Do NOT generate live gameplay prose, do NOT advance into morning, and do NOT print a Stat Tracker. Remind them lightly (only if natural) that they can save, summarize, keep chatting, or type **Proceed** whenever they're ready to wake up.`;
+    }
+  }
+    
   // --- THE APP-INJECTED STANDBY ROLL (Universal Backend Protocol) ---
   else if (currentGameState === "ACTIVE") {
     // 1. Do Not Disturb Rule: Check if the player already provided a manual roll
