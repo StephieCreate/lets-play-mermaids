@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
+  ChevronDown,
   ClipboardList,
   Copy,
+  Edit3,
   Eraser,
+  Eye,
   Files,
   Loader2,
   MessageSquare,
+  Save,
   ScanLine,
+  Search,
   Send,
   Square,
   Terminal,
@@ -19,7 +24,6 @@ import { useFontSettings } from '@/context/FontSettingsContext';
 import { supabase } from '@/lib/supabase';
 import { handleChatKeyDown } from '@/lib/deviceInput';
 import MarkdownChat from '@/components/devMode/MarkdownChat';
-import RulePane from '@/components/devMode/RulePane';
 import {
   estimateTokens,
   nextCartridgeVersion,
@@ -28,7 +32,7 @@ import {
   type DevFile,
 } from '@/components/devMode/versionScanner';
 
-type StudioTab = 'viewer' | 'scanner' | 'chat';
+type StudioTab = 'tools' | 'scanner' | 'chat';
 
 interface ChatMessage {
   id: string | null;
@@ -37,15 +41,45 @@ interface ChatMessage {
   deleting?: boolean;
 }
 
-const BASELINE_KEY = 'dev_mode_rule_baseline_v1';
-const MAX_CHAT_FILES_BYTES = 8_000_000;
-const MAX_SAVED_MESSAGES = 200;
-
 interface SavedChatRow {
   id: string;
   role: 'user' | 'assistant';
   content: string;
 }
+
+interface MarkdownSection {
+  index: number;
+  heading: string;
+  start: number;
+  end: number;
+  text: string;
+}
+
+interface SectionSearchHit {
+  key: string;
+  file: DevFile;
+  section: MarkdownSection;
+  matchCount: number;
+  snippet: string;
+}
+
+interface SavedSectionBanner {
+  fileId: string;
+  title: string;
+  heading: string;
+  fullContent: string;
+}
+
+const BASELINE_KEY = 'dev_mode_rule_baseline_v1';
+const MAX_CHAT_FILES_BYTES = 8_000_000;
+const MAX_SAVED_MESSAGES = 200;
+
+const CORE_SLUGS = new Set([
+  'universal-core-engine',
+  'universal-game-templates',
+  'medicinal-algae-quick-reference',
+  'lets-play-mermaids-world-lore',
+]);
 
 async function fetchSavedMessages(userId: string): Promise<ChatMessage[]> {
   const { data, error } = await supabase
@@ -114,22 +148,100 @@ function loadBaseline(): Record<string, string> {
   }
 }
 
+// Splits a markdown document into exact-offset sections by headings (ignoring # inside code fences)
+function parseMarkdownSections(content: string): MarkdownSection[] {
+  if (!content) return [];
+  const sections: MarkdownSection[] = [];
+  const lineRegex = /[^\n]*\n|[^\n]+$/g;
+  let inCodeFence = false;
+  let currentStart = 0;
+  let currentHeading = 'Document Header / Intro';
+  let hasStarted = false;
+  let match: RegExpExecArray | null;
+
+  while ((match = lineRegex.exec(content)) !== null) {
+    const rawLine = match[0];
+    const lineStart = match.index;
+    const trimmed = rawLine.trim();
+
+    if (trimmed.startsWith('```')) {
+      inCodeFence = !inCodeFence;
+    }
+
+    const headingMatch = !inCodeFence ? rawLine.match(/^(#{1,6})\s+(.+?)\r?\n?$/) : null;
+
+    if (headingMatch) {
+      if (hasStarted && lineStart > currentStart) {
+        sections.push({
+          index: sections.length,
+          heading: currentHeading,
+          start: currentStart,
+          end: lineStart,
+          text: content.slice(currentStart, lineStart),
+        });
+      }
+      currentStart = lineStart;
+      currentHeading = headingMatch[2].trim();
+      hasStarted = true;
+    } else if (!hasStarted) {
+      hasStarted = true;
+    }
+  }
+
+  if (hasStarted && currentStart < content.length) {
+    sections.push({
+      index: sections.length,
+      heading: currentHeading,
+      start: currentStart,
+      end: content.length,
+      text: content.slice(currentStart),
+    });
+  }
+
+  return sections;
+}
+
+function buildSnippet(text: string, queryLower: string): string {
+  const lower = text.toLowerCase();
+  const idx = lower.indexOf(queryLower);
+  if (idx === -1) return text.slice(0, 140).replace(/\s+/g, ' ').trim();
+  const start = Math.max(0, idx - 55);
+  const end = Math.min(text.length, idx + queryLower.length + 105);
+  const slice = text.slice(start, end).replace(/\s+/g, ' ').trim();
+  return `${start > 0 ? '…' : ''}${slice}${end < text.length ? '…' : ''}`;
+}
+
 export default function DevModeStudio() {
   const { user, isAdmin } = useAuth();
   const { fontFamilyClass, fontPx } = useFontSettings();
 
-  const [studioTab, setStudioTab] = useState<StudioTab>('viewer');
+  const [studioTab, setStudioTab] = useState<StudioTab>('tools');
   const [files, setFiles] = useState<DevFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [paneLeftId, setPaneLeftId] = useState<string | null>(null);
-  const [paneRightId, setPaneRightId] = useState<string | null>(null);
-
+  // Rule attachment checklist (all groups always start collapsed)
   const [attachedIds, setAttachedIds] = useState<Set<string>>(new Set());
-  const [cartridge, setCartridge] = useState<CartridgeSnapshot | null>(null);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const [peekFile, setPeekFile] = useState<DevFile null |>(null);
+  const [peekCopied, setPeekCopied] = useState(false);
+
+  // Cross-file search + inline Markdown section patcher
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchAttachedOnly, setSearchAttachedOnly] = useState(false);
+  const [editingHitKey, setEditingHitKey] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState('');
+  const [savingSection, setSavingSection] = useState(false);
+  const [sectionError, setSectionError] = useState<string | null>(null);
+  const [copiedHitKey, setCopiedHitKey] = useState<string | null>(null);
+  const [savedBanner, setSavedBanner] = useState<SavedSectionBanner null |>(null);
+  const [copiedBanner, setCopiedBanner] = useState(false);
+
+  // Version scanner state
+  const [cartridge, setCartridge] = useState<CartridgeSnapshot null |>(null);
   const [baseline] = useState<Record<string, string>>(() => loadBaseline());
 
+  // Dev Chat state
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatHistoryLoading, setChatHistoryLoading] = useState(true);
   const [confirmClear, setConfirmClear] = useState(false);
@@ -141,7 +253,7 @@ export default function DevModeStudio() {
 
   const feedRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const abortControllerRef = useRef<AbortController null |>(null);
   const prevChatCountRef = useRef(0);
   const userId = user?.id ?? null;
 
@@ -203,8 +315,6 @@ export default function DevModeStudio() {
           });
         }
         setFiles(loaded);
-        setPaneLeftId((prev) => prev ?? loaded[0]?.id ?? null);
-        setPaneRightId((prev) => prev ?? loaded[1]?.id ?? null);
       }
 
       if (!cartridgeRes.error) {
@@ -291,10 +401,81 @@ export default function DevModeStudio() {
     () => attachedFiles.reduce((sum, f) => sum + f.content.length, 0),
     [attachedFiles],
   );
-  const leftFile = files.find((f) => f.id === paneLeftId) ?? null;
-  const rightFile = files.find((f) => f.id === paneRightId) ?? null;
 
-  const coreRuleFiles = useMemo(() => files.filter((f) => f.kind === 'rule'), [files]);
+  // Organized rule groups for the always-collapsed checklist
+  const fileGroups = useMemo(() => {
+    const core: DevFile[] = [];
+    const apex: DevFile[] = [];
+    const triad: DevFile[] = [];
+    const npc: DevFile[] = [];
+    const customApex: DevFile[] = [];
+    const other: DevFile[] = [];
+
+    for (const file of files) {
+      if (file.kind === 'apex') {
+        customApex.push(file);
+      } else if (CORE_SLUGS.has(file.slug)) {
+        core.push(file);
+      } else if (file.slug.startsWith('apex-')) {
+        apex.push(file);
+      } else if (file.slug.startsWith('triad-')) {
+        triad.push(file);
+      } else if (file.slug.startsWith('npc-')) {
+        npc.push(file);
+      } else {
+        other.push(file);
+      }
+    }
+
+    return [
+      { key: 'core', label: 'Core Rules', items: core },
+      { key: 'apex', label: 'Apex Plugins', items: apex },
+      { key: 'triad', label: 'Triad Rules', items: triad },
+      { key: 'npc', label: 'NPCs', items: npc },
+      { key: 'custom-apex', label: 'Custom Apexes', items: customApex },
+      { key: 'other', label: 'Other Rules', items: other },
+    ].filter((g) => g.items.length > 0);
+  }, [files]);
+
+  const coreFiles = useMemo(
+    () => files.filter((f) => f.kind === 'rule' && CORE_SLUGS.has(f.slug)),
+    [files],
+  );
+
+  // Cross-file Markdown section search
+  const searchHits = useMemo<SectionSearchHit[]>(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (q.length < 2) return [];
+
+    const pool = searchAttachedOnly ? attachedFiles : files;
+    const hits: SectionSearchHit[] = [];
+
+    for (const file of pool) {
+      if (!file.content) continue;
+      const sections = parseMarkdownSections(file.content);
+      for (const section of sections) {
+        const lower = section.text.toLowerCase();
+        let count = 0;
+        let pos = lower.indexOf(q);
+        while (pos !== -1) {
+          count += 1;
+          pos = lower.indexOf(q, pos + q.length);
+        }
+        if (count > 0) {
+          hits.push({
+            key: `${file.id}::${section.index}`,
+            file,
+            section,
+            matchCount: count,
+            snippet: buildSnippet(section.text, q),
+          });
+        }
+      }
+    }
+
+    return hits;
+  }, [searchQuery, searchAttachedOnly, attachedFiles, files]);
+
   const scanRows = useMemo(() => scanFiles(files, cartridge, baseline), [files, cartridge, baseline]);
   const recommendedCartridgeVersion = useMemo(
     () => nextCartridgeVersion(cartridge, files),
@@ -388,20 +569,94 @@ export default function DevModeStudio() {
     });
   };
 
-  const selectAllCore = () => {
+  const toggleGroupSelection = (items: DevFile[]) => {
     setAttachedIds((prev) => {
       const next = new Set(prev);
-      for (const f of coreRuleFiles) next.add(f.id);
+      const allSelected = items.every((item) => next.has(item.id));
+      for (const item of items) {
+        if (allSelected) next.delete(item.id);
+        else next.add(item.id);
+      }
       return next;
     });
   };
 
+  const selectCoreOnly = () => {
+    setAttachedIds(new Set(coreFiles.map((f) => f.id)));
+  };
+
+  const selectAllRules = () => {
+    setAttachedIds(new Set(files.filter((f) => f.kind === 'rule').map((f) => f.id)));
+  };
+
   const clearAll = () => setAttachedIds(new Set());
 
-  const handleSaveRuleContent = (dbId: string, kind: 'rule' | 'apex', content: string) => {
+  const startPatchSection = (hit: SectionSearchHit) => {
+    setEditingHitKey(hit.key);
+    setEditDraft(hit.section.text);
+    setSectionError(null);
+  };
+
+  const cancelPatchSection = () => {
+    setEditingHitKey(null);
+    setEditDraft('');
+    setSectionError(null);
+  };
+
+  const handleSaveSection = async (hit: SectionSearchHit) => {
+    setSavingSection(true);
+    setSectionError(null);
+
+    const { file, section } = hit;
+    let replacement = editDraft;
+    // Keep the next heading on its own line if another section follows
+    if (section.end < file.content.length && replacement.length > 0 && !replacement.endsWith('\n')) {
+      replacement += '\n';
+    }
+
+    const updatedFullContent =
+      file.content.slice(0, section.start) + replacement + file.content.slice(section.end);
+
+    const { error: updateError } =
+      file.kind === 'rule'
+        ? await supabase
+            .from('rule_documents')
+            .update({ content: updatedFullContent, updated_at: new Date().toISOString() })
+            .eq('id', file.dbId)
+        : await supabase
+            .from('user_custom_apexes')
+            .update({ content: updatedFullContent })
+            .eq('id', file.dbId);
+
+    if (updateError) {
+      console.error('Could not save patched section', updateError);
+      setSectionError('Could not save that section. Please try again.');
+      setSavingSection(false);
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
     setFiles((prev) =>
-      prev.map((f) => (f.dbId === dbId && f.kind === kind ? { ...f, content, updatedAt: new Date().toISOString() } : f)),
+      prev.map((f) =>
+        f.id === file.id ? { ...f, content: updatedFullContent, updatedAt: nowIso } : f,
+      ),
     );
+    setEditingHitKey(null);
+    setEditDraft('');
+    setSavedBanner({
+      fileId: file.id,
+      title: file.title,
+      heading: section.heading,
+      fullContent: updatedFullContent,
+    });
+    setCopiedBanner(false);
+    setSavingSection(false);
+  };
+
+  const copySectionText = (hit: SectionSearchHit) => {
+    void navigator.clipboard.writeText(hit.section.text);
+    setCopiedHitKey(hit.key);
+    window.setTimeout(() => setCopiedHitKey(null), 1800);
   };
 
   const handleSend = () => {
@@ -520,7 +775,7 @@ export default function DevModeStudio() {
         <div className="mb-2 flex items-center justify-between gap-2 sm:mb-3">
           <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-300 sm:flex">
-              <Terminal className="h-5 w-5" />
+              <Terminal className="h-5 w-5"/>
             </div>
             <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 sm:block">
               <h2 className="shrink-0 font-display text-base font-semibold leading-tight text-pearl sm:text-xl">
@@ -532,8 +787,8 @@ export default function DevModeStudio() {
             </div>
           </div>
 
-          {studioTab === 'chat' && (
-            confirmClear ? (
+          {studioTab === 'chat' &&
+            (confirmClear ? (
               <div className="flex shrink-0 items-center gap-1.5">
                 <span className="text-xs text-coral-300">Clear?</span>
                 <button
@@ -559,24 +814,23 @@ export default function DevModeStudio() {
                 className="inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-lg border border-abyss-500/35 bg-abyss-800/40 px-2.5 py-1 text-xs font-medium text-muted transition-colors hover:text-pearl disabled:opacity-40 sm:min-h-9 sm:px-3"
                 title="Clear Dev Chat"
               >
-                <Eraser className="h-3.5 w-3.5" />
+                <Eraser className="h-3.5 w-3.5"/>
                 <span>Clear</span>
               </button>
-            )
-          )}
+            ))}
         </div>
 
         <div className="flex items-center gap-1.5 rounded-xl bg-abyss-950/50 p-1">
-          {studioTabBtn('viewer', <Files className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />, 'Rule Viewer')}
-          {studioTabBtn('scanner', <ScanLine className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />, 'Version Scanner')}
-          {studioTabBtn('chat', <MessageSquare className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />, 'Dev Chat')}
+          {studioTabBtn('tools', <Files className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4"/>, 'Rule Tools')}
+          {studioTabBtn('scanner', <ScanLine className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4"/>, 'Version Scanner')}
+          {studioTabBtn('chat', <MessageSquare className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4"/>, 'Dev Chat')}
         </div>
       </div>
 
       {loading && (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4">
           <div className="glass-panel flex items-center justify-center gap-2 rounded-2xl px-8 py-6 text-sm text-muted">
-            <Loader2 className="h-5 w-5 animate-spin" />
+            <Loader2 className="h-5 w-5 animate-spin"/>
             Loading your rule files...
           </div>
         </div>
@@ -588,52 +842,376 @@ export default function DevModeStudio() {
         </div>
       )}
 
-      {/* ---------- VIEWER (SCROLLABLE MIDDLE PANE) ---------- */}
-      {!loading && !loadError && studioTab === 'viewer' && (
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3 sm:px-5 sm:py-4 lg:px-0 lg:py-0">
-          <div className="glass-panel flex flex-wrap items-center gap-2 rounded-2xl p-3">
-            <button
-              type="button"
-              onClick={selectAllCore}
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-foam-400/40 bg-foam-900/20 px-3 py-1.5 text-xs font-medium text-foam-200 hover:bg-foam-900/40"
-            >
-              <Check className="h-3.5 w-3.5" />
-              Select All Core
-            </button>
-            <button
-              type="button"
-              onClick={clearAll}
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-abyss-500/35 bg-abyss-800/40 px-3 py-1.5 text-xs font-medium text-muted hover:text-pearl"
-            >
-              <Eraser className="h-3.5 w-3.5" />
-              Clear All
-            </button>
-            <span className="ml-auto text-xs text-muted">
-              <strong className="text-pearl">{attachedFiles.length}</strong> attached ·{' '}
-              {(attachedChars / 1000).toFixed(1)}k chars (full text) · ~
-              {attachedTokens.toLocaleString()} tokens
-            </span>
+      {/* ---------- RULE TOOLS: COLLAPSED CHECKLIST + CROSS-FILE SEARCH & SECTION PATCHER ---------- */}
+      {!loading && !loadError && studioTab === 'tools' && (
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-3 py-3 sm:px-5 sm:py-4 lg:px-0 lg:py-0">
+          {/* 1. DEV CHAT CONTEXT PICKER (ALWAYS-COLLAPSED ACCORDION GROUPS) */}
+          <div className="glass-panel rounded-2xl p-3.5 sm:p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-abyss-300/75">
+                  Dev Chat Context Files
+                </p>
+                <p className="mt-0.5 text-xs text-muted">
+                  <strong className="text-pearl">{attachedFiles.length}</strong> attached ·{' '}
+                  {(attachedChars / 1000).toFixed(1)}k chars (full text) · ~
+                  {attachedTokens.toLocaleString()} tokens
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setStudioTab('chat')}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-amber-400/40 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-200 transition-colors hover:bg-amber-500/25"
+              >
+                <MessageSquare className="h-3.5 w-3.5"/>
+                Open Dev Chat
+              </button>
+            </div>
+
+            <div className="mb-3 flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={selectCoreOnly}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-foam-400/40 bg-foam-900/20 px-3 py-1.5 text-xs font-medium text-foam-200 transition-colors hover:bg-foam-900/40"
+              >
+                <Check className="h-3.5 w-3.5"/>
+                Select Core ({coreFiles.length})
+              </button>
+              <button
+                type="button"
+                onClick={selectAllRules}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-abyss-400/35 bg-abyss-800/45 px-3 py-1.5 text-xs font-medium text-pearl transition-colors hover:bg-abyss-700/50"
+              >
+                Select All Rules
+              </button>
+              <button
+                type="button"
+                onClick={clearAll}
+                disabled={attachedIds.size === 0}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-abyss-500/35 bg-abyss-900/40 px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:text-pearl disabled:opacity-40"
+              >
+                <Eraser className="h-3.5 w-3.5"/>
+                Clear
+              </button>
+            </div>
+
+            {/* Always-collapsed group accordions */}
+            <div className="space-y-1.5">
+              {fileGroups.map((group) => {
+                const isOpen = Boolean(openGroups[group.key]);
+                const selectedInGroup = group.items.filter((item) => attachedIds.has(item.id)).length;
+                const allInGroupSelected = selectedInGroup === group.items.length && group.items.length > 0;
+
+                return (
+                  <div
+                    key={group.key}
+                    className="overflow-hidden rounded-xl border border-abyss-700/35 bg-abyss-950/35"
+                  >
+                    <div className="flex items-center justify-between gap-2 px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setOpenGroups((prev) => ({ ...prev, [group.key]: !prev[group.key] }))
+                        }
+                        className="flex min-h-9 min-w-0 flex-1 items-center gap-2 text-left"
+                        aria-expanded={isOpen}
+                      >
+                        <ChevronDown ${ '' '-rotate-90' : ? className="{`h-4" duration-200 isOpen shrink-0 text-abyss-300/80 transition-transform w-4 }`}/>
+                        <span className="truncate text-xs font-semibold uppercase tracking-[0.14em] text-pearl">
+                          {group.label}
+                        </span>
+                        <span
+                          className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                            selectedInGroup > 0
+                              ? 'border border-amber-400/35 bg-amber-500/15 text-amber-200'
+                              : 'border border-abyss-600/40 bg-abyss-900/60 text-muted'
+                          }`}
+                        >
+                          {selectedInGroup}/{group.items.length}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => toggleGroupSelection(group.items)}
+                        className="shrink-0 rounded-lg border border-abyss-600/40 bg-abyss-900/50 px-2.5 py-1 text-[11px] font-medium text-muted transition-colors hover:text-pearl"
+                      >
+                        {allInGroupSelected ? 'Uncheck all' : 'Check all'}
+                      </button>
+                    </div>
+
+                    {isOpen && (
+                      <div className="divide-y divide-abyss-800/40 border-t border-abyss-700/30 px-2 py-1">
+                        {group.items.map((file) => {
+                          const checked = attachedIds.has(file.id);
+                          return (
+                            <div
+                              key={file.id}
+                              className="flex items-center justify-between gap-2 rounded-lg px-2 py-2 transition-colors hover:bg-abyss-800/30"
+                            >
+                              <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => toggleAttached(file.id)}
+                                  className="h-4 w-4 shrink-0 rounded border-abyss-500/60 bg-abyss-950 text-amber-400 focus:ring-amber-400/40"
+                                />
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-sm font-medium text-pearl">
+                                    {file.title}
+                                  </span>
+                                  <span className="block text-[11px] text-muted">
+                                    {(file.content.length / 1000).toFixed(1)}k chars
+                                    {file.content.length === 0 ? ' · empty' : ''}
+                                  </span>
+                                </span>
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPeekFile(file);
+                                  setPeekCopied(false);
+                                }}
+                                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-abyss-600/35 bg-abyss-900/50 text-muted transition-colors hover:border-abyss-400/50 hover:text-pearl"
+                                title={`Peek ${file.title}`}
+                                aria-label={`Peek ${file.title}`}
+                              >
+                                <Eye className="h-3.5 w-3.5"/>
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:items-start xl:gap-6">
-            <RulePane
-              label="Pane 1"
-              file={leftFile}
-              files={files}
-              attached={leftFile ? attachedIds.has(leftFile.id) : false}
-              onAttachToggle={() => leftFile && toggleAttached(leftFile.id)}
-              onSelectFile={setPaneLeftId}
-              onSaveContent={handleSaveRuleContent}
-            />
-            <RulePane
-              label="Pane 2"
-              file={rightFile}
-              files={files}
-              attached={rightFile ? attachedIds.has(rightFile.id) : false}
-              onAttachToggle={() => rightFile && toggleAttached(rightFile.id)}
-              onSelectFile={setPaneRightId}
-              onSaveContent={handleSaveRuleContent}
-            />
+          {/* 2. SEARCH ACROSS ALL RULES + SECTION PATCHER */}
+          <div className="glass-panel rounded-2xl p-3.5 sm:p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-abyss-300/75">
+                  Find &amp; Patch Sections Across Rules
+                </p>
+                <p className="mt-0.5 text-xs text-muted">
+                  Search a mechanic, term, or heading to inspect or patch just that Markdown section.
+                </p>
+              </div>
+              <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-muted">
+                <input
+                  type="checkbox"
+                  checked={searchAttachedOnly}
+                  onChange={(e) => setSearchAttachedOnly(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-abyss-500/60 bg-abyss-950 text-amber-400"
+                />
+                <span>Attached only</span>
+              </label>
+            </div>
+
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted/70"/>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setSectionError(null);
+                }}
+                placeholder="Search e.g. Fortified Claim, Grotto Safety, Legacy Marks..."
+                className="min-h-11 w-full rounded-xl border border-abyss-600/45 bg-abyss-950/70 py-2 pl-9 pr-9 text-sm text-pearl outline-none placeholder:text-muted/50 focus:border-amber-400/60"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    cancelPatchSection();
+                  }}
+                  className="absolute right-2.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted hover:text-pearl"
+                  aria-label="Clear search"
+                >
+                  <X className="h-4 w-4"/>
+                </button>
+              )}
+            </div>
+
+            {/* Post-save banner so you can copy the full updated rule back into Google Docs */}
+            {savedBanner && (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-400/35 bg-emerald-500/10 px-3.5 py-2.5 text-xs text-emerald-200">
+                <div className="min-w-0">
+                  <p className="font-semibold">
+                    Saved section in {savedBanner.title}
+                  </p>
+                  <p className="truncate text-emerald-200/80">{savedBanner.heading}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(savedBanner.fullContent);
+                      setCopiedBanner(true);
+                      window.setTimeout(() => setCopiedBanner(false), 2000);
+                    }}
+                    className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-emerald-400/40 bg-emerald-500/20 px-2.5 py-1 text-xs font-semibold text-emerald-100 transition-colors hover:bg-emerald-500/30"
+                  >
+                    {copiedBanner ? <Check className="h-3.5 w-3.5"/> : <Copy className="h-3.5 w-3.5"/>}
+                    {copiedBanner ? 'Copied Full Rule!' : 'Copy Full Rule for Docs'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSavedBanner(null)}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md text-emerald-200/70 hover:text-emerald-100"
+                    aria-label="Dismiss saved notice"
+                  >
+                    <X className="h-3.5 w-3.5"/>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {sectionError && (
+              <div className="mt-3 flex items-start gap-2 rounded-xl border border-coral-500/30 bg-coral-900/20 px-3 py-2 text-xs text-coral-200">
+                <X className="mt-0.5 h-4 w-4 shrink-0"/>
+                <span>{sectionError}</span>
+              </div>
+            )}
+
+            {/* Search results */}
+            {searchQuery.trim().length >= 2 && (
+              <div className="mt-3 space-y-2.5">
+                <p className="text-xs text-muted">
+                  {searchHits.length === 0
+                    ? `No matching sections found${searchAttachedOnly ? ' in attached files' : ''}.`
+                    : `${searchHits.length} matching section${searchHits.length === 1 ? '' : 's'} across ${
+                        new Set(searchHits.map((h) => h.file.id)).size
+                      } file${new Set(searchHits.map((h) => h.file.id)).size === 1 ? '' : 's'}`}
+                </p>
+
+                {searchHits.map((hit) => {
+                  const isEditingThis = editingHitKey === hit.key;
+                  const isAttached = attachedIds.has(hit.file.id);
+                  const charDelta = isEditingThis ? editDraft.length - hit.section.text.length : 0;
+
+                  return (
+                    <div
+                      key={hit.key}
+                      className="rounded-xl border border-abyss-700/40 bg-abyss-950/50 p-3 sm:p-3.5"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-xs font-semibold text-amber-200">{hit.file.title}</span>
+                            <span className="rounded-full border border-abyss-600/40 bg-abyss-900/70 px-2 py-0.5 text-[10px] font-medium text-abyss-200">
+                              {hit.matchCount} match{hit.matchCount === 1 ? '' : 'es'}
+                            </span>
+                          </div>
+                          <p className="mt-0.5 break-words text-sm font-semibold text-pearl">
+                            {hit.section.heading}
+                          </p>
+                        </div>
+
+                        <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                          {!isAttached && (
+                            <button
+                              type="button"
+                              onClick={() => toggleAttached(hit.file.id)}
+                              className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-abyss-500/40 bg-abyss-900/60 px-2.5 py-1 text-[11px] font-medium text-abyss-200 hover:text-pearl"
+                              title="Attach this file to Dev Chat"
+                            >
+                              + Attach
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => copySectionText(hit)}
+                            className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-abyss-500/40 bg-abyss-900/60 px-2.5 py-1 text-[11px] font-medium text-muted hover:text-pearl"
+                            title="Copy just this Markdown section"
+                          >
+                            {copiedHitKey === hit.key ? (
+                              <Check className="h-3.5 w-3.5 text-emerald-400"/>
+                            ) : (
+                              <Copy className="h-3.5 w-3.5"/>
+                            )}
+                            <span>{copiedHitKey === hit.key ? 'Copied' : 'Copy'}</span>
+                          </button>
+                          {!isEditingThis && (
+                            <button
+                              type="button"
+                              onClick={() => startPatchSection(hit)}
+                              className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-amber-400/40 bg-amber-500/15 px-2.5 py-1 text-[11px] font-semibold text-amber-200 hover:bg-amber-500/25"
+                            >
+                              <Edit3 className="h-3.5 w-3.5"/>
+                              <span>Patch Section</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {!isEditingThis ? (
+                        <p className="mt-2 break-words rounded-lg bg-abyss-900/50 px-2.5 py-2 font-mono text-xs leading-relaxed text-muted">
+                          {hit.snippet}
+                        </p>
+                      ) : (
+                        <div className="mt-3 space-y-2.5">
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted">
+                            <span>
+                              Editing only this section ({hit.section.text.length.toLocaleString()} chars original)
+                            </span>
+                            <span
+                              className={`font-mono font-semibold ${
+                                charDelta > 0
+                                  ? 'text-emerald-300'
+                                  : charDelta < 0
+                                    ? 'text-amber-300'
+                                    : 'text-muted'
+                              }`}
+                            >
+                              {charDelta > 0 ? `+${charDelta}` : charDelta} chars
+                            </span>
+                          </div>
+
+                          <textarea
+                            value={editDraft}
+                            onChange={(e) => setEditDraft(e.target.value)}
+                            rows={10}
+                            spellCheck={false}
+                            className="min-h-[12rem] w-full resize-y rounded-xl border border-amber-400/40 bg-abyss-950/85 p-3 font-mono text-xs leading-6 text-pearl outline-none focus:border-amber-300/70 sm:text-sm"
+                          />
+
+                          <div className="flex flex-wrap items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={cancelPatchSection}
+                              disabled={savingSection}
+                              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-abyss-500/40 px-3 py-1.5 text-xs font-medium text-muted hover:text-pearl disabled:opacity-40"
+                            >
+                              <X className="h-3.5 w-3.5"/>
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleSaveSection(hit)}
+                              disabled={savingSection}
+                              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-gradient-to-r from-amber-500/90 to-amber-400/90 px-3.5 py-1.5 text-xs font-semibold text-abyss-950 transition-opacity hover:opacity-95 disabled:opacity-50"
+                            >
+                              {savingSection ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin"/>
+                              ) : (
+                                <Save className="h-3.5 w-3.5"/>
+                              )}
+                              <span>{savingSection ? 'Saving...' : 'Save Section'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -662,7 +1240,7 @@ export default function DevModeStudio() {
               disabled={files.length === 0}
               className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-abyss-500/80 px-4 py-2 text-sm font-semibold text-pearl transition-colors hover:bg-abyss-400 disabled:opacity-50"
             >
-              <ClipboardList className="h-4 w-4" />
+              <ClipboardList className="h-4 w-4"/>
               Send Version Audit to Dev Chat
             </button>
           </div>
@@ -727,7 +1305,7 @@ export default function DevModeStudio() {
           >
             {chatHistoryLoading ? (
               <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted">
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin"/>
                 Loading your saved conversation...
               </div>
             ) : (
@@ -735,8 +1313,8 @@ export default function DevModeStudio() {
                 {chatMessages.length === 0 && !chatSending && (
                   <div className="rounded-xl border border-dashed border-abyss-600/40 bg-abyss-950/30 p-4 text-center sm:p-5">
                     <p className="mb-3 text-sm text-muted">
-                      Chat freely about rules, lore, balance, and edits. Attach files in the Rule Viewer
-                      first so the assistant can read them.
+                      Chat freely about rules, lore, balance, and edits. Check the files you want in
+                      Rule Tools first so the assistant can read them.
                     </p>
                     <div className="flex flex-wrap justify-center gap-2">
                       {starterChats.map((chip) => (
@@ -785,9 +1363,9 @@ export default function DevModeStudio() {
                           aria-label="Copy message"
                         >
                           {copiedIndex === idx ? (
-                            <Check className="h-4 w-4 text-emerald-400" />
+                            <Check className="h-4 w-4 text-emerald-400"/>
                           ) : (
-                            <Copy className="h-4 w-4" />
+                            <Copy className="h-4 w-4"/>
                           )}
                         </button>
                         <button
@@ -799,9 +1377,9 @@ export default function DevModeStudio() {
                           aria-label="Delete message"
                         >
                           {message.deleting ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <Loader2 className="h-4 w-4 animate-spin"/>
                           ) : (
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-4 w-4"/>
                           )}
                         </button>
                       </div>
@@ -815,7 +1393,7 @@ export default function DevModeStudio() {
                       </p>
                     ) : (
                       <div className={`min-w-0 break-words ${fontFamilyClass}`} style={{ fontSize: fontPx }}>
-                        <MarkdownChat content={message.content} />
+                        <MarkdownChat content="{message.content}"/>
                       </div>
                     )}
                   </div>
@@ -824,7 +1402,7 @@ export default function DevModeStudio() {
                 {chatSending && (
                   <div className="rounded-2xl border border-abyss-600/30 bg-abyss-950/40 p-4 sm:p-5">
                     <div className="flex items-center gap-2 text-sm text-muted">
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <Loader2 className="h-4 w-4 animate-spin"/>
                       The Dev Assistant is thinking...
                     </div>
                   </div>
@@ -837,7 +1415,7 @@ export default function DevModeStudio() {
           <div className="shrink-0 border-t border-abyss-700/35 bg-abyss-950/90 px-3 py-2 backdrop-blur-xl sm:px-5 sm:py-3 lg:bg-abyss-950/40 lg:backdrop-blur-none">
             {chatError && (
               <div className="mb-2 flex items-start gap-2 rounded-xl border border-coral-500/30 bg-coral-900/20 px-3 py-2 text-xs text-coral-200 sm:text-sm">
-                <X className="mt-0.5 h-4 w-4 shrink-0" />
+                <X className="mt-0.5 h-4 w-4 shrink-0"/>
                 <span>{chatError}</span>
               </div>
             )}
@@ -849,7 +1427,7 @@ export default function DevModeStudio() {
               </span>
               <button
                 type="button"
-                onClick={() => setStudioTab('viewer')}
+                onClick={() => setStudioTab('tools')}
                 className="shrink-0 rounded-full border border-abyss-500/40 px-2 py-0.5 font-medium text-abyss-200 transition-colors hover:text-pearl"
               >
                 Files
@@ -881,11 +1459,60 @@ export default function DevModeStudio() {
                 title={chatSending ? 'Stop generating' : 'Send (Enter)'}
               >
                 {chatSending ? (
-                  <Square className="h-[18px] w-[18px] fill-current" />
+                  <Square className="h-[18px] w-[18px] fill-current"/>
                 ) : (
-                  <Send className="h-[18px] w-[18px]" />
+                  <Send className="h-[18px] w-[18px]"/>
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* READ-ONLY QUICK PEEK MODAL */}
+      {peekFile && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-abyss-950/80 p-3 backdrop-blur-sm sm:p-6"
+          onClick={() => setPeekFile(null)}
+        >
+          <div
+            className="glass-panel flex max-h-[85dvh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-abyss-600/50"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-abyss-700/40 px-4 py-3">
+              <div className="min-w-0">
+                <p className="truncate font-display text-lg font-semibold text-pearl">{peekFile.title}</p>
+                <p className="text-xs text-muted">
+                  {peekFile.category} · {(peekFile.content.length / 1000).toFixed(1)}k chars
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(peekFile.content);
+                    setPeekCopied(true);
+                    window.setTimeout(() => setPeekCopied(false), 1800);
+                  }}
+                  className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-abyss-500/40 px-2.5 py-1 text-xs font-medium text-muted hover:text-pearl"
+                >
+                  {peekCopied ? <Check className="h-3.5 w-3.5 text-emerald-400"/> : <Copy className="h-3.5 w-3.5"/>}
+                  {peekCopied ? 'Copied' : 'Copy'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPeekFile(null)}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-abyss-500/40 text-muted hover:text-pearl"
+                  aria-label="Close preview"
+                >
+                  <X className="h-4 w-4"/>
+                </button>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+              <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-6 text-muted sm:text-sm">
+                {peekFile.content || 'This file is currently empty.'}
+              </pre>
             </div>
           </div>
         </div>
