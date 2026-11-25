@@ -1,3 +1,4 @@
+// [BOLT WIRING / FRIDAY DEPLOY: Deploy updated supabase/functions/narrate Edge Function to your new Supabase project]
 import type { NarrateRequest, TimePacingState } from "./types.ts";
 
 export const isSummaryRequest = (text: string) => {
@@ -39,16 +40,45 @@ export const isDayStartAnchor = (text: string) => {
     lower.includes('start game') || lower.includes('start the game') || lower.includes('begin game');
 };
 
+// === [SEARCH: BEDTIME / NIGHTLY HALT DETECTOR] ===
 export const isNightlyHalt = (text: string) => {
+  // const (locked e/e Chestnut): cleaned lowercase copy of what the player typed
   const lower = text.trim().toLowerCase();
-  return lower === 'i go to sleep' || lower.startsWith('i go to sleep') ||
-    lower.startsWith("let's go to sleep") || lower.startsWith('lets go to sleep') ||
-    lower.startsWith('we go to sleep') || lower.startsWith('go to sleep') ||
-    lower.startsWith('retire for the night') || lower.startsWith('bed down for the night') ||
-    lower.includes('i go to sleep') || lower.includes('go to sleep') ||
-    lower.includes('sleep for the night') || lower.includes('retire for the night') ||
-    lower.includes('bed down for the night') || lower.includes('make camp and sleep') ||
-    lower.includes('set up camp and sleep');
+
+  // Negation Guard: stops accidental triggers if the player is still awake
+  // (e.g., "I'm too shaken to go to sleep yet" or "Before I go to sleep, I check the cave")
+  const isNotSleepingYet =
+    /\b(before\s+i\s+(?:go\s+to\s+)?sleep|too\s+\w+\s+to\s+(?:go\s+to\s+)?sleep|can'?t\s+(?:go\s+to\s+)?sleep|unable\s+to\s+sleep|won'?t\s+(?:go\s+to\s+)?sleep|not\s+(?:ready\s+to\s+|going\s+to\s+)?sleep|don'?t\s+want\s+to\s+sleep)\b/i.test(
+      lower
+    );
+
+  // If the player explicitly says they aren't sleeping yet, stop here and return false
+  if (isNotSleepingYet) return false;
+
+  // || (Dominant Agouti "OR" gate): if ANY single phrase below shows up, trigger Nightly Halt
+  return (
+    lower === "i go to sleep" ||
+    lower.startsWith("i go to sleep") ||
+    lower.startsWith("let's go to sleep") ||
+    lower.startsWith("lets go to sleep") ||
+    lower.startsWith("we go to sleep") ||
+    lower.startsWith("go to sleep") ||
+    lower.startsWith("retire for the night") ||
+    lower.startsWith("bed down for the night") ||
+    lower.includes("i go to sleep") ||
+    lower.includes("go to sleep") ||
+    lower.includes("sleep for the night") ||
+    lower.includes("retire for the night") ||
+    lower.includes("bed down for the night") ||
+    lower.includes("make camp and sleep") ||
+    lower.includes("set up camp and sleep") ||
+    lower.includes("curl up to sleep") ||
+    lower.includes("drift off to sleep") ||
+    lower.includes("fall asleep for the night") ||
+    lower.includes("settle in to sleep") ||
+    lower.includes("turn in for the night") ||
+    lower.includes("close my eyes and sleep")
+  );
 };
 
 /**
