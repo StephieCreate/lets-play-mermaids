@@ -223,7 +223,7 @@ export default function DevModeStudio() {
   // Rule attachment checklist (all groups always start collapsed)
   const [attachedIds, setAttachedIds] = useState<Set<string>>(new Set());
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
-  const [peekFile, setPeekFile] = useState<DevFile null |>(null);
+  const [peekFile, setPeekFile] = useState<DevFile | null>(null);
   const [peekCopied, setPeekCopied] = useState(false);
 
   // Cross-file search + inline Markdown section patcher
@@ -234,11 +234,11 @@ export default function DevModeStudio() {
   const [savingSection, setSavingSection] = useState(false);
   const [sectionError, setSectionError] = useState<string | null>(null);
   const [copiedHitKey, setCopiedHitKey] = useState<string | null>(null);
-  const [savedBanner, setSavedBanner] = useState<SavedSectionBanner null |>(null);
+  const [savedBanner, setSavedBanner] = useState<SavedSectionBanner | null>(null);
   const [copiedBanner, setCopiedBanner] = useState(false);
 
   // Version scanner state
-  const [cartridge, setCartridge] = useState<CartridgeSnapshot null |>(null);
+  const [cartridge, setCartridge] = useState<CartridgeSnapshot | null>(null);
   const [baseline] = useState<Record<string, string>>(() => loadBaseline());
 
   // Dev Chat state
@@ -253,7 +253,7 @@ export default function DevModeStudio() {
 
   const feedRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const abortControllerRef = useRef<AbortController null |>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const prevChatCountRef = useRef(0);
   const userId = user?.id ?? null;
 
@@ -916,7 +916,11 @@ export default function DevModeStudio() {
                         className="flex min-h-9 min-w-0 flex-1 items-center gap-2 text-left"
                         aria-expanded={isOpen}
                       >
-                        <ChevronDown ${ '' '-rotate-90' : ? className="{`h-4" duration-200 isOpen shrink-0 text-abyss-300/80 transition-transform w-4 }`}/>
+                        <ChevronDown
+                          className={`h-4 w-4 shrink-0 text-abyss-300/80 transition-transform duration-200 ${
+                          isOpen ? '' : '-rotate-90'
+                           }`}
+                          />
                         <span className="truncate text-xs font-semibold uppercase tracking-[0.14em] text-pearl">
                           {group.label}
                         </span>
@@ -1393,7 +1397,7 @@ export default function DevModeStudio() {
                       </p>
                     ) : (
                       <div className={`min-w-0 break-words ${fontFamilyClass}`} style={{ fontSize: fontPx }}>
-                        <MarkdownChat content="{message.content}"/>
+                        <MarkdownChat content={message.content}/>
                       </div>
                     )}
                   </div>
