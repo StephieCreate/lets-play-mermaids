@@ -1,0 +1,8 @@
+{
+  "name": "Let's Play Mermaids",
+  "short_name": "Mermaids",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#04111d",
+  "theme_color": "#04111d"
+}

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useChatScrollBottom } from '@/hooks/useChatScrollBottom';
 import {
   BookOpenCheck,
   Check,
@@ -280,10 +281,12 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
   const [showQuickPrompts, setShowQuickPrompts] = useState(false);
   const [modelLabel, setModelLabel] = useState('');
 
-  const feedRef = useRef<HTMLDivElement>(null);
+  const { containerRef: feedRef, scrollToBottom: scrollToFeedBottom } = useChatScrollBottom<HTMLDivElement>(
+    messages.length,
+    { disabled: historyLoading },
+  );
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const prevCountRef = useRef(0);
   const userId = user?.id ?? null;
 
   useEffect(() => {
@@ -303,14 +306,8 @@ export default function RulesHelperChat({ onSignIn }: { onSignIn: () => void }) 
     };
   }, [userId]);
 
-  // Scroll only the inner chat container, and only when a new message is added.
-  useEffect(() => {
-    if (messages.length > prevCountRef.current && feedRef.current) {
-      feedRef.current.scrollTop = feedRef.current.scrollHeight;
-    }
-    prevCountRef.current = messages.length;
-  }, [messages]);
-
+  // The useChatScrollBottom hook handles bottom-anchoring for new messages,
+  // mount-with-history, tab switches, visibility, and rotation/resize.
   useEffect(() => {
     if (!userId) return;
     let cancelled = false;

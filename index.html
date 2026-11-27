@@ -13,6 +13,33 @@
          and a mermaid favicon at public/favicon.svg, then update the hrefs below. -->
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <script>
+      // Phone-only portrait lock: silently attempt orientation lock on small, touch
+      // screens only — never tablets or desktops. No rotate warning, no CSS hacks.
+      (function () {
+        function isPhone() {
+          return (
+            Math.min(window.screen.width, window.screen.height) < 600 &&
+            window.matchMedia('(pointer: coarse)').matches
+          );
+        }
+        function tryLock() {
+          if (!isPhone()) return;
+          try {
+            var result = screen.orientation && screen.orientation.lock && screen.orientation.lock('portrait');
+            if (result && typeof result.catch === 'function') result.catch(function () {});
+          } catch (e) {
+            /* unsupported — ignore silently */
+          }
+        }
+        tryLock();
+        window.addEventListener('orientationchange', tryLock);
+        if (screen.orientation && typeof screen.orientation.addEventListener === 'function') {
+          screen.orientation.addEventListener('change', tryLock);
+        }
+      })();
+    </script>
     <title>Let's Play Mermaids: Dark Ocean Survival — Text-Based Dark Romance RPG</title>
     <meta name="description" content="Let's Play Mermaids: Dark Ocean Survival is a browser-based text RPG. Create your mermaid, survive the dark ocean, forge bonds, and shape a story driven by AI narration and your choices." />
     <meta name="robots" content="index, follow" />

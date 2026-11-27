@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useChatScrollBottom } from '@/hooks/useChatScrollBottom';
 import { ArrowLeft, Send, Waves, BookOpen, ScrollText, Home, Sparkles, Box, Loader2, Trash2, AlertTriangle, X, Dices, Sun, Copy, Check, Bug, Minus, Plus, RefreshCw, Square } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useAiPreferences } from '@/context/AiPreferencesContext';
@@ -200,7 +201,6 @@ export default function PlayScreen({ playthroughId, onBack, onSignIn, onReportBu
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [gentleDay, setGentleDay] = useState(false);
   const gentleDayRef = useRef(false);
-  const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -233,6 +233,11 @@ export default function PlayScreen({ playthroughId, onBack, onSignIn, onReportBu
     }
     setMessages((prev) => prev.filter((m) => m.id !== messageId));
   };
+
+  const { containerRef: chatFeedRef, scrollToBottom: scrollToFeedBottom } = useChatScrollBottom<HTMLDivElement>(
+    messages.length,
+    { resnapSignal: activeTab, disabled: loading },
+  );
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -369,15 +374,8 @@ export default function PlayScreen({ playthroughId, onBack, onSignIn, onReportBu
     };
   }, [playthroughId, user?.id]);
 
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  useEffect(() => {
-    if (activeTab === 'play') {
-      chatEndRef.current?.scrollIntoView({ behavior: 'auto' });
-    }
-  }, [activeTab]);
+  // The useChatScrollBottom hook handles bottom-anchoring for new messages,
+  // tab switches, visibility, and rotation/resize.
 
   // --- Stat Values & Threshold Calculations ---
   const rawState = (playthrough?.story_state ?? {}) as Record<string, unknown>;
@@ -1045,7 +1043,7 @@ export default function PlayScreen({ playthroughId, onBack, onSignIn, onReportBu
       </div>
 
       {/* Content area */}
-      <div className="flex-1 overflow-y-auto px-3 pt-6 pb-44 sm:px-6 sm:pt-8 sm:pb-48">
+      <div ref={chatFeedRef} className="flex-1 overflow-y-auto px-3 pt-6 pb-44 sm:px-6 sm:pt-8 sm:pb-48">
         <div className="mx-auto max-w-4xl">
           {activeTab === 'play' ? (
             <div className="flex flex-col gap-4">
@@ -1117,8 +1115,6 @@ export default function PlayScreen({ playthroughId, onBack, onSignIn, onReportBu
               {error && (
                 <p className="rounded-lg border border-coral-600/30 bg-coral-600/10 px-4 py-3 text-sm text-coral-300">{error}</p>
               )}
-
-              <div ref={chatEndRef} />
             </div>
           ) : activeTab === 'daily-save-log' ? (
             <DailySaveLog playthroughId={playthroughId} onSignIn={onSignIn} />

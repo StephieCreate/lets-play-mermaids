@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useAiPreferences } from '@/context/AiPreferencesContext';
+import { useChatScrollBottom } from '@/hooks/useChatScrollBottom';
 import { useFontSettings } from '@/context/FontSettingsContext';
 import { supabase } from '@/lib/supabase';
 import { handleChatKeyDown } from '@/lib/deviceInput';
@@ -253,10 +254,12 @@ export default function DevModeStudio() {
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [activeModelLabel, setActiveModelLabel] = useState<string>('');
 
-  const feedRef = useRef<HTMLDivElement>(null);
+  const { containerRef: feedRef, scrollToBottom: scrollToFeedBottom } = useChatScrollBottom<HTMLDivElement>(
+    chatMessages.length,
+    { resnapSignal: studioTab, disabled: chatHistoryLoading },
+  );
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const prevChatCountRef = useRef(0);
   const userId = user?.id ?? null;
 
   // ---- Data loading ----
@@ -379,21 +382,8 @@ export default function DevModeStudio() {
     };
   }, [userId]);
 
-  // Scroll only the inner chat container, and only when a new message is added.
-  useEffect(() => {
-    if (chatMessages.length > prevChatCountRef.current && feedRef.current) {
-      feedRef.current.scrollTop = feedRef.current.scrollHeight;
-    }
-    prevChatCountRef.current = chatMessages.length;
-  }, [chatMessages]);
-
-  // Jump to the newest message whenever the Dev Chat tab is opened.
-  useEffect(() => {
-    if (studioTab === 'chat' && feedRef.current) {
-      feedRef.current.scrollTop = feedRef.current.scrollHeight;
-    }
-  }, [studioTab, chatHistoryLoading]);
-
+  // The useChatScrollBottom hook handles bottom-anchoring for new messages,
+  // tab switches, visibility, and rotation/resize.
   const attachedFiles = useMemo(() => files.filter((f) => attachedIds.has(f.id)), [files, attachedIds]);
   const attachedTokens = useMemo(
     () => estimateTokens(attachedFiles.map((f) => f.content).join('\n')),
